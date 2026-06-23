@@ -165,6 +165,24 @@ export function DisbursementsClient({ initialDisbursements, paypalFeesByDeal }: 
       setDisbursements(prev => prev.map(x => x.id === id ? { ...x, status: 'sent', sent_at: new Date().toISOString(), ...(method ? { payment_method: method } : {}) } : x))
       toast.success('Marked as sent')
       if (d) logActivity({ action: 'Disbursement marked as sent', entity_type: 'disbursement', entity_id: id, entity_label: `${d.recipient_name} — ${formatCurrency(d.amount)}`, metadata: { prev_status: 'approved', payment_method: method } })
+
+      // Auto-complete deal when all disbursements are sent
+      if (d?.deal_id) {
+        const { data: dealDisbs } = await supabase
+          .from('disbursements')
+          .select('id, status')
+          .eq('deal_id', d.deal_id)
+        const allSent = dealDisbs && dealDisbs.length >= 2 &&
+          dealDisbs.every((x: any) => ['sent', 'confirmed'].includes(x.status))
+        if (allSent) {
+          const { error: dealErr } = await supabase.from('deals').update({ status: 'disbursed' }).eq('id', d.deal_id)
+          if (!dealErr) {
+            toast.success(`${d.deal?.deal_id || 'Deal'} marked as disbursed`)
+            logActivity({ action: 'Deal auto-marked as disbursed', entity_type: 'deal', entity_id: d.deal_id, entity_label: d.deal?.deal_id || d.deal_id, metadata: { trigger: 'all_disbursements_sent' } })
+          }
+        }
+      }
+
       router.refresh()
     }
     await setLoading(id, false)
