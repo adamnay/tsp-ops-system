@@ -60,11 +60,11 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
 
       if (paymentError) throw paymentError
 
-      // 2. Create disbursements only if none exist for this deal yet
+      // 2. Create disbursements for this payment if not already created
       const { data: existingDisb } = await supabase
         .from('disbursements')
         .select('id')
-        .eq('deal_id', deal.id)
+        .eq('payment_id', payment.id)
         .limit(1)
 
       if (!existingDisb || existingDisb.length === 0) {
