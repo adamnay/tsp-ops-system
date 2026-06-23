@@ -60,24 +60,22 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
 
       if (paymentError) throw paymentError
 
-      // 2. Create disbursements for this payment if not already created
-      const { data: existingDisb } = await supabase
+      // 2. One disbursement per deal — create on first payment, update fee on subsequent ones
+      const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
+
+      const { data: existingDisbs } = await supabase
         .from('disbursements')
-        .select('id')
-        .eq('payment_id', payment.id)
-        .limit(1)
+        .select('id, amount, recipient_type')
+        .eq('deal_id', deal.id)
 
-      if (!existingDisb || existingDisb.length === 0) {
-        const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
-        const creatorAmount = Math.max(0, deal.creator_payout - paypalFee)
-
+      if (!existingDisbs || existingDisbs.length === 0) {
         const { error: disbError } = await supabase.from('disbursements').insert([
           {
             deal_id: deal.id,
             payment_id: payment.id,
             recipient_type: 'creator',
             recipient_name: deal.creator?.stage_name || deal.creator?.legal_name,
-            amount: creatorAmount,
+            amount: Math.max(0, deal.creator_payout - paypalFee),
             status: 'pending_approval',
           },
           {
@@ -90,6 +88,14 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
           },
         ])
         if (disbError) throw disbError
+      } else if (paypalFee > 0) {
+        // Subsequent payment with a fee — subtract it from the existing creator disbursement
+        const creatorDisb = existingDisbs.find((d: any) => d.recipient_type === 'creator')
+        if (creatorDisb) {
+          await supabase.from('disbursements').update({
+            amount: Math.max(0, creatorDisb.amount - paypalFee),
+          }).eq('id', creatorDisb.id)
+        }
       }
 
       // 3. Update deal status based on cumulative payments
