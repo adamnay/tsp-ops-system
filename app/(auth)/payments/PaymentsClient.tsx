@@ -321,9 +321,14 @@ export function PaymentsClient({ initialPayments, initialLastSynced }: Props) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  const displayPayments = activeTab === 'ignored'
+  const displayPayments = (activeTab === 'ignored'
     ? payments.filter(p => p.match_status === 'ignored')
     : payments.filter(p => p.match_status !== 'ignored')
+  ).sort((a, b) => {
+    const dateA = a.payment_date + (a.created_at || '')
+    const dateB = b.payment_date + (b.created_at || '')
+    return dateB.localeCompare(dateA)
+  })
 
   const ignoredCount = payments.filter(p => p.match_status === 'ignored').length
 
