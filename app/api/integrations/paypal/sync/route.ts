@@ -125,7 +125,7 @@ export async function POST() {
     if (insertError) throw new Error(insertError.message)
 
     // Run AI reconciliation for each newly inserted payment
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     for (const payment of inserted ?? []) {
       fetch(`${baseUrl}/api/reconcile`, {
         method: 'POST',

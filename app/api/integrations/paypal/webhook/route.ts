@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     if (error) throw new Error(error.message)
 
     // Run AI reconciliation in background
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     fetch(`${baseUrl}/api/reconcile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
