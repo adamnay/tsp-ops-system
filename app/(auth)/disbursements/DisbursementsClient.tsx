@@ -371,6 +371,12 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                             <span className="font-mono font-semibold text-[#F0F2F8]">{formatCurrency(d.amount)}</span>
                             <StatusBadge status={d.status} />
                           </div>
+                          {d.recipient_type === 'creator' && (() => {
+                            const fee = Math.abs(parseFloat(d.payment?.raw_import_data?.paypal_fee || '0') || 0)
+                            return fee > 0 ? (
+                              <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(fee)} PayPal fee deducted</p>
+                            ) : null
+                          })()}
                           <div className="flex items-center gap-3 mt-0.5 text-xs text-[#5A6080]">
                             {d.deal && (
                               <Link href={`/deals/${d.deal_id}`} className="hover:text-[#00E5FF] transition-colors">
@@ -440,7 +446,15 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                     </td>
                     <td className="py-3 px-4 text-[#F0F2F8]">{d.recipient_name}</td>
                     <td className="py-3 px-4 text-xs uppercase text-[#8B91A8]">{d.recipient_type}</td>
-                    <td className="py-3 px-4 font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</span>
+                      {d.recipient_type === 'creator' && (() => {
+                        const fee = Math.abs(parseFloat(d.payment?.raw_import_data?.paypal_fee || '0') || 0)
+                        return fee > 0 ? (
+                          <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(fee)} PayPal fee</p>
+                        ) : null
+                      })()}
+                    </td>
                     <td className="py-3 px-4">
                       {d.deal ? (
                         <Link href={`/deals/${d.deal_id}`} className="text-xs font-mono text-[#8B91A8] hover:text-[#00E5FF] transition-colors">
