@@ -115,7 +115,7 @@ export async function POST() {
       })
 
     if (toInsert.length === 0) {
-      return NextResponse.json({ imported: 0, message: 'All transactions already imported', debug, existingRefs: Array.from(existingRefs) })
+      return NextResponse.json({ imported: 0, message: `PayPal returned ${incoming.length} transaction${incoming.length !== 1 ? 's' : ''} — all already imported`, debug, existingRefs: Array.from(existingRefs) })
     }
 
     const { data: inserted, error: insertError } = await supabase
