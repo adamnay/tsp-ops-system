@@ -85,9 +85,10 @@ function detectAndParseCSV(rows: any[]): Array<{
 
 interface Props {
   initialPayments: any[]
+  initialLastSynced: string | null
 }
 
-export function PaymentsClient({ initialPayments }: Props) {
+export function PaymentsClient({ initialPayments, initialLastSynced }: Props) {
   const [payments, setPayments] = useState(initialPayments)
   const [activeTab, setActiveTab] = useState<'all' | 'ignored'>('all')
   const [modalOpen, setModalOpen] = useState(false)
@@ -95,6 +96,7 @@ export function PaymentsClient({ initialPayments }: Props) {
   const [importLoading, setImportLoading] = useState(false)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [lastSynced, setLastSynced] = useState<string | null>(initialLastSynced)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0)
   const [deleting, setDeleting] = useState(false)
@@ -164,16 +166,28 @@ export function PaymentsClient({ initialPayments }: Props) {
       console.log('PayPal sync full response:', JSON.stringify(json, null, 2))
       if (!res.ok) {
         toast.error(json.error || 'Sync failed')
-      } else if (json.imported === 0) {
-        toast(json.message || 'No new transactions')
       } else {
-        toast.success(`Synced ${json.imported} new transaction${json.imported > 1 ? 's' : ''} from PayPal`)
-        router.refresh()
+        setLastSynced(new Date().toISOString())
+        if (json.imported === 0) {
+          toast(json.message || 'No new transactions')
+        } else {
+          toast.success(`Synced ${json.imported} new transaction${json.imported > 1 ? 's' : ''} from PayPal`)
+          router.refresh()
+        }
       }
     } catch {
       toast.error('Network error')
     }
     setSyncing(false)
+  }
+
+  function formatLastSynced(iso: string | null): string {
+    if (!iso) return ''
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
   const [form, setForm] = useState({
@@ -388,9 +402,14 @@ export function PaymentsClient({ initialPayments }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <input ref={fileRef} type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
-          <Button variant="secondary" onClick={syncPayPal} loading={syncing}>
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} /> Sync PayPal
-          </Button>
+          <div className="flex flex-col items-end gap-0.5">
+            <Button variant="secondary" onClick={syncPayPal} loading={syncing}>
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} /> Sync PayPal
+            </Button>
+            {lastSynced && (
+              <span className="text-[10px] text-[#5A6080]">Synced {formatLastSynced(lastSynced)}</span>
+            )}
+          </div>
           <Button variant="secondary" onClick={() => downloadCSV(payments.map((p: any) => ({ 'Date': p.payment_date, 'Sender': p.sender_name || '', 'Amount': p.amount, 'Source': p.source || '', 'Status': p.match_status, 'Matched Deal': p.matched_deal?.deal_id || '', 'Campaign': p.matched_deal?.campaign_name || '', 'Brand': p.matched_deal?.brand?.brand_name || '', 'Memo': p.memo || '' })), 'payments')}>
             <Download className="w-4 h-4" /> Export CSV
           </Button>

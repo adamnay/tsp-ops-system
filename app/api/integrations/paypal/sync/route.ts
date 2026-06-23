@@ -134,6 +134,11 @@ export async function POST() {
       }).catch(() => {})
     }
 
+    await supabase.from('integration_settings').upsert(
+      { key: 'paypal_last_synced', value: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    )
+
     return NextResponse.json({ imported: toInsert.length, total: incoming.length, debug })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
