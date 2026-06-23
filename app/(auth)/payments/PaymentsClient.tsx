@@ -196,10 +196,11 @@ export function PaymentsClient({ initialPayments, initialLastSynced }: Props) {
     source: 'bluevine',
     sender_name: '',
     memo: '',
+    paypal_fee: '',
   })
 
   function resetForm() {
-    setForm({ amount: '', payment_date: new Date().toISOString().split('T')[0], source: 'bluevine', sender_name: '', memo: '' })
+    setForm({ amount: '', payment_date: new Date().toISOString().split('T')[0], source: 'bluevine', sender_name: '', memo: '', paypal_fee: '' })
   }
 
   async function reconcilePayment(paymentId: string, paymentData: any) {
@@ -220,12 +221,15 @@ export function PaymentsClient({ initialPayments, initialLastSynced }: Props) {
     if (!form.amount || !form.sender_name) return toast.error('Amount and sender name are required')
     setLoading(true)
 
+    const paypalFee = form.source === 'paypal' && form.paypal_fee ? parseFloat(form.paypal_fee) : null
+
     const paymentData = {
       amount: parseFloat(form.amount),
       payment_date: form.payment_date,
       source: form.source,
       sender_name: form.sender_name.trim(),
       memo: form.memo.trim() || null,
+      raw_import_data: paypalFee ? { paypal_fee: paypalFee } : null,
     }
 
     const { data, error } = await supabase.from('payments').insert({ ...paymentData, match_status: 'unmatched' }).select('*, matched_deal:deals!payments_matched_deal_id_fkey(deal_id, campaign_name, brand:brands(brand_name))').single()
@@ -496,9 +500,28 @@ export function PaymentsClient({ initialPayments, initialLastSynced }: Props) {
             <Input label="Amount ($) *" type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="5000.00" />
             <Input label="Payment Date *" type="date" value={form.payment_date} onChange={e => setForm(f => ({ ...f, payment_date: e.target.value }))} />
           </div>
-          <Select label="Source *" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))} options={SOURCE_OPTIONS} />
+          <Select label="Source *" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value, paypal_fee: '' }))} options={SOURCE_OPTIONS} />
           <Input label="Sender Name *" value={form.sender_name} onChange={e => setForm(f => ({ ...f, sender_name: e.target.value }))} placeholder="Exactly as it appeared" />
           <Input label="Memo / Reference" value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))} placeholder="Reference field from bank" />
+          {form.source === 'paypal' && (
+            <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 space-y-2">
+              <p className="text-xs text-[#8B91A8]">Did PayPal take a fee on this payment?</p>
+              <Input
+                label="PayPal Fee ($) — leave blank if none"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.paypal_fee}
+                onChange={e => setForm(f => ({ ...f, paypal_fee: e.target.value }))}
+                placeholder="e.g. 1.75"
+              />
+              {form.paypal_fee && parseFloat(form.paypal_fee) > 0 && form.amount && (
+                <p className="text-xs text-[#5A6080]">
+                  Creator payout will be reduced by <span className="text-[#FF4D6A]">{formatCurrency(parseFloat(form.paypal_fee))}</span> at reconciliation
+                </p>
+              )}
+            </div>
+          )}
           <p className="text-xs text-[#5A6080]">AI reconciliation will run automatically after saving.</p>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => { setModalOpen(false); resetForm() }}>Cancel</Button>
