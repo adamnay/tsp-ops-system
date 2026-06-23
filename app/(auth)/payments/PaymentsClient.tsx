@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Payment } from '@/lib/types'
@@ -101,6 +101,26 @@ export function PaymentsClient({ initialPayments }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('payments-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payments' }, payload => {
+        const newPayment = payload.new as any
+        setPayments(prev => {
+          if (prev.find(p => p.id === newPayment.id)) return prev
+          return [newPayment, ...prev]
+        })
+        toast.success(`New payment received: ${newPayment.sender_name} — $${newPayment.amount}`)
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'payments' }, payload => {
+        const updated = payload.new as any
+        setPayments(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   function toggleSelect(id: string, e: React.MouseEvent) {
     e.stopPropagation()
