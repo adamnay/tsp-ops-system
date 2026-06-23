@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
       'PAYMENT.SALE.COMPLETED',
       'PAYMENT.CAPTURE.COMPLETED',
       'CHECKOUT.ORDER.COMPLETED',
+      'MONEY.TRANSFER.COMPLETED',
     ]
     if (!handledEvents.includes(event_type)) {
       return NextResponse.json({ received: true, skipped: true })
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
     const amount = parseFloat(
       resource?.amount?.total ||
       resource?.amount?.value ||
+      resource?.gross_amount?.value ||
       resource?.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value ||
       '0'
     )
