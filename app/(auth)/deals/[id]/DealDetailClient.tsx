@@ -296,7 +296,12 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
                   <tr key={d.id} className="border-b border-[#2A2D3E]/50">
                     <td className="py-3 px-4 text-[#F0F2F8]">{d.recipient_name}</td>
                     <td className="py-3 px-4"><span className="text-xs uppercase text-[#8B91A8]">{d.recipient_type}</span></td>
-                    <td className="py-3 px-4 font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</span>
+                      {d.recipient_type === 'creator' && totalPaypalFees > 0 && (
+                        <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(totalPaypalFees)} PayPal fee</p>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-[#8B91A8] capitalize">{d.payment_method || '—'}</td>
                     <td className="py-3 px-4"><StatusBadge status={d.status} /></td>
                   </tr>
