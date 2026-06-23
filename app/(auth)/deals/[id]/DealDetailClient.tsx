@@ -133,7 +133,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
         <Card>
           <p className="text-xs text-[#5A6080] mb-1">TSP Total</p>
           <p className="font-mono text-xl font-semibold text-[#00E5FF]">{formatCurrency(deal.tsp_total)}</p>
-          <p className="text-xs text-[#5A6080] mt-1">Margin ${formatCurrency(deal.tsp_margin)} + {deal.tsp_commission_pct}%</p>
+          <p className="text-xs text-[#5A6080] mt-1">Margin {formatCurrency(deal.tsp_margin)} + {deal.tsp_commission_pct}%</p>
         </Card>
         <Card>
           <p className="text-xs text-[#5A6080] mb-1">Creator Payout</p>
