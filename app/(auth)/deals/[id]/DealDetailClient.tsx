@@ -100,6 +100,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
 
   const totalReceived = payments.reduce((s: number, p: any) => s + p.amount, 0)
   const totalDisbursed = disbursements.filter((d: any) => ['sent', 'confirmed'].includes(d.status)).reduce((s: number, d: any) => s + d.amount, 0)
+  const totalPaypalFees = payments.reduce((s: number, p: any) => s + (parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -137,7 +138,14 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
         <Card>
           <p className="text-xs text-[#5A6080] mb-1">Creator Payout</p>
           <p className="font-mono text-xl font-semibold text-[#00D084]">{formatCurrency(deal.creator_payout)}</p>
-          <p className="text-xs text-[#5A6080] mt-1">{100 - deal.tsp_commission_pct}% of creator rate</p>
+          {totalPaypalFees > 0 ? (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-xs text-[#FF4D6A]">−{formatCurrency(totalPaypalFees)} PayPal fee</p>
+              <p className="text-xs font-mono font-semibold text-[#00D084]">= {formatCurrency(deal.creator_payout - totalPaypalFees)} net</p>
+            </div>
+          ) : (
+            <p className="text-xs text-[#5A6080] mt-1">{100 - deal.tsp_commission_pct}% of creator rate</p>
+          )}
         </Card>
       </div>
 
