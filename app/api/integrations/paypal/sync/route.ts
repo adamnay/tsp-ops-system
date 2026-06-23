@@ -126,13 +126,13 @@ export async function POST() {
 
     // Run AI reconciliation for each newly inserted payment
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-    for (const payment of inserted ?? []) {
+    await Promise.all((inserted ?? []).map(payment =>
       fetch(`${baseUrl}/api/reconcile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_id: payment.id, payment }),
       }).catch(() => {})
-    }
+    ))
 
     await supabase.from('integration_settings').upsert(
       { key: 'paypal_last_synced', value: new Date().toISOString(), updated_at: new Date().toISOString() },
