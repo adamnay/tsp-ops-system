@@ -372,9 +372,9 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                             <StatusBadge status={d.status} />
                           </div>
                           {d.recipient_type === 'creator' && (() => {
-                            const fee = Math.abs(parseFloat(d.payment?.raw_import_data?.paypal_fee || '0') || 0)
-                            return fee > 0 ? (
-                              <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(fee)} PayPal fee deducted</p>
+                            const totalFee = (d.deal?.payments ?? []).reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+                            return totalFee > 0 ? (
+                              <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(totalFee)} PayPal fee deducted</p>
                             ) : null
                           })()}
                           <div className="flex items-center gap-3 mt-0.5 text-xs text-[#5A6080]">
@@ -449,9 +449,9 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                     <td className="py-3 px-4">
                       <span className="font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</span>
                       {d.recipient_type === 'creator' && (() => {
-                        const fee = Math.abs(parseFloat(d.payment?.raw_import_data?.paypal_fee || '0') || 0)
-                        return fee > 0 ? (
-                          <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(fee)} PayPal fee</p>
+                        const totalFee = (d.deal?.payments ?? []).reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+                        return totalFee > 0 ? (
+                          <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(totalFee)} PayPal fee</p>
                         ) : null
                       })()}
                     </td>
