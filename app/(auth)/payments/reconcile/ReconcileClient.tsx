@@ -61,7 +61,7 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
       if (paymentError) throw paymentError
 
       // 2. One disbursement per deal — create on first payment, update fee on subsequent ones
-      const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
+      const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
 
       const { data: existingDisbs } = await supabase
         .from('disbursements')
@@ -324,7 +324,7 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
                     {selectedDeals[payment.id] && (() => {
                       const deal = openDeals.find((d: any) => d.id === selectedDeals[payment.id])
                       if (!deal) return null
-                      const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
+                      const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
                       const adjustedCreatorPayout = Math.max(0, deal.creator_payout - paypalFee)
                       return (
                         <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 text-xs space-y-1">

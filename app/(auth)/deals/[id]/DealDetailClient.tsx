@@ -100,7 +100,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
 
   const totalReceived = payments.reduce((s: number, p: any) => s + p.amount, 0)
   const totalDisbursed = disbursements.filter((d: any) => ['sent', 'confirmed'].includes(d.status)).reduce((s: number, d: any) => s + d.amount, 0)
-  const totalPaypalFees = payments.reduce((s: number, p: any) => s + (parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+  const totalPaypalFees = payments.reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
 
   return (
     <div className="space-y-6">

@@ -86,12 +86,12 @@ export async function POST(req: NextRequest) {
       '0'
     )
 
-    const fee = parseFloat(
+    const fee = Math.abs(parseFloat(
       resource?.transaction_fee?.value ||
       resource?.seller_receivable_breakdown?.paypal_fee?.value ||
       resource?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.paypal_fee?.value ||
       '0'
-    )
+    ))
 
     if (amount <= 0) return NextResponse.json({ received: true, skipped: true })
 

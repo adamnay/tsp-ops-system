@@ -100,7 +100,7 @@ export async function POST() {
         const senderName = payer?.payer_name?.alternate_full_name || payer?.email_address || 'PayPal'
         const memo = info.transaction_note || info.transaction_subject || null
 
-        const fee = parseFloat(info.fee_amount?.value ?? '0') || null
+        const fee = Math.abs(parseFloat(info.fee_amount?.value ?? '0')) || null
 
         return {
           amount,
