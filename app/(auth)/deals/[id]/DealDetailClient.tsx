@@ -27,9 +27,10 @@ interface Props {
   deal: any
   payments: any[]
   disbursements: any[]
+  allocations: any[]
 }
 
-export function DealDetailClient({ deal: initialDeal, payments, disbursements }: Props) {
+export function DealDetailClient({ deal: initialDeal, payments, disbursements, allocations }: Props) {
   const [deal, setDeal] = useState(initialDeal)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [uploadingContract, setUploadingContract] = useState(false)
@@ -98,9 +99,13 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
     toast.success('Payment reference copied')
   }
 
-  const totalReceived = payments.reduce((s: number, p: any) => s + p.amount, 0)
+  const totalFromDirect = payments.reduce((s: number, p: any) => s + p.amount, 0)
+  const totalFromAllocations = allocations.reduce((s: number, a: any) => s + a.allocated_amount, 0)
+  const totalReceived = totalFromDirect + totalFromAllocations
   const totalDisbursed = disbursements.filter((d: any) => ['sent', 'confirmed'].includes(d.status)).reduce((s: number, d: any) => s + d.amount, 0)
-  const totalPaypalFees = payments.reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+  const totalPaypalFees =
+    payments.reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0) +
+    allocations.reduce((s: number, a: any) => s + (a.paypal_fee || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -253,7 +258,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
       <div>
         <h2 className="text-sm font-medium text-[#8B91A8] uppercase tracking-wider mb-3">Linked Payments</h2>
         <div className="bg-[#1A1D27] border border-[#2A2D3E] rounded-lg overflow-hidden">
-          {payments.length === 0 ? (
+          {payments.length === 0 && allocations.length === 0 ? (
             <p className="px-5 py-6 text-center text-[#5A6080] text-sm">No payments matched to this deal yet</p>
           ) : (
             <table className="w-full text-sm">
@@ -270,6 +275,21 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements }:
                     <td className="py-3 px-4 font-mono text-[#F0F2F8]">{formatCurrency(p.amount)}</td>
                     <td className="py-3 px-4 text-[#8B91A8] capitalize">{p.source}</td>
                     <td className="py-3 px-4"><StatusBadge status={p.match_status} /></td>
+                  </tr>
+                ))}
+                {allocations.map((a: any) => (
+                  <tr key={a.id} className="border-b border-[#2A2D3E]/50">
+                    <td className="py-3 px-4 text-xs text-[#5A6080]">{formatDate(a.payment?.payment_date)}</td>
+                    <td className="py-3 px-4 text-[#F0F2F8]">
+                      {a.payment?.sender_name}
+                      <span className="ml-1.5 text-[10px] text-[#8B91A8] bg-[#2A2D3E] px-1.5 py-0.5 rounded">split</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-mono text-[#F0F2F8]">{formatCurrency(a.allocated_amount)}</span>
+                      <p className="text-[10px] text-[#5A6080] font-mono mt-0.5">of {formatCurrency(a.payment?.amount)} total</p>
+                    </td>
+                    <td className="py-3 px-4 text-[#8B91A8] capitalize">{a.payment?.source}</td>
+                    <td className="py-3 px-4"><StatusBadge status="confirmed" /></td>
                   </tr>
                 ))}
               </tbody>

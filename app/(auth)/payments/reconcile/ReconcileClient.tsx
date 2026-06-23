@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { CheckCircle, XCircle, ArrowLeftRight, Brain, Ban, RefreshCw } from 'lucide-react'
+import { CheckCircle, XCircle, ArrowLeftRight, Brain, Ban, RefreshCw, Scissors, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
 import { logActivity } from '@/lib/activity'
@@ -20,7 +20,6 @@ interface Props {
 export function ReconcileClient({ initialPayments, openDeals }: Props) {
   const [payments, setPayments] = useState(initialPayments)
   const [selectedDeals, setSelectedDeals] = useState<Record<string, string>>(() => {
-    // Pre-populate with AI suggestions
     const init: Record<string, string> = {}
     initialPayments.forEach(p => {
       if (p.ai_suggested_deal_id) init[p.id] = p.ai_suggested_deal_id
@@ -31,6 +30,8 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
   const [reanalyzingId, setReanalyzingId] = useState<string | null>(null)
   const [brandUpdate, setBrandUpdate] = useState<{ brandId: string; brandName: string; newAlias: string | null; newMethod: string | null; currentAliases: string[]; currentMethods: string[] } | null>(null)
   const [savingBrandUpdate, setSavingBrandUpdate] = useState(false)
+  const [splitModeIds, setSplitModeIds] = useState<Set<string>>(new Set())
+  const [splitAllocations, setSplitAllocations] = useState<Record<string, { id: string; dealId: string; amount: string }[]>>({})
   const supabase = createClient()
   const router = useRouter()
 
@@ -38,6 +39,164 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
     value: d.id,
     label: `${d.deal_id} — ${d.brand?.brand_name} × ${d.creator?.stage_name || d.creator?.legal_name} (${formatCurrency(d.brand_rate)})`,
   }))
+
+  // ── Split mode helpers ─────────────────────────────────────────────────────
+
+  function enterSplitMode(paymentId: string) {
+    setSplitModeIds(prev => { const next = new Set(prev); next.add(paymentId); return next })
+    setSplitAllocations(prev => ({
+      ...prev,
+      [paymentId]: [
+        { id: Math.random().toString(36).slice(2), dealId: '', amount: '' },
+        { id: Math.random().toString(36).slice(2), dealId: '', amount: '' },
+      ],
+    }))
+  }
+
+  function exitSplitMode(paymentId: string) {
+    setSplitModeIds(prev => { const next = new Set(prev); next.delete(paymentId); return next })
+  }
+
+  function addSplitRow(paymentId: string) {
+    setSplitAllocations(prev => ({
+      ...prev,
+      [paymentId]: [...(prev[paymentId] || []), { id: Math.random().toString(36).slice(2), dealId: '', amount: '' }],
+    }))
+  }
+
+  function removeSplitRow(paymentId: string, rowId: string) {
+    setSplitAllocations(prev => ({
+      ...prev,
+      [paymentId]: (prev[paymentId] || []).filter(r => r.id !== rowId),
+    }))
+  }
+
+  function updateSplitRow(paymentId: string, rowId: string, field: 'dealId' | 'amount', value: string) {
+    setSplitAllocations(prev => ({
+      ...prev,
+      [paymentId]: (prev[paymentId] || []).map(r => r.id === rowId ? { ...r, [field]: value } : r),
+    }))
+  }
+
+  function getFilteredDealOptions(paymentId: string, rowId: string) {
+    const usedIds = (splitAllocations[paymentId] || []).filter(r => r.id !== rowId && r.dealId).map(r => r.dealId)
+    return dealOptions.filter(opt => !usedIds.includes(opt.value))
+  }
+
+  // ── Confirm split ──────────────────────────────────────────────────────────
+
+  async function confirmSplit(payment: any) {
+    const allocations = splitAllocations[payment.id] || []
+    const parsed = allocations.map(a => ({ dealId: a.dealId, amount: parseFloat(a.amount) }))
+
+    if (parsed.some(a => !a.dealId || isNaN(a.amount) || a.amount <= 0)) {
+      return toast.error('All rows must have a deal selected and a positive amount')
+    }
+
+    const totalAllocated = parsed.reduce((s, a) => s + a.amount, 0)
+    if (Math.abs(totalAllocated - payment.amount) > 0.01) {
+      return toast.error(`Allocations must sum to ${formatCurrency(payment.amount)} — currently ${formatCurrency(totalAllocated)}`)
+    }
+
+    setLoadingId(payment.id)
+    const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
+
+    try {
+      // 1. Mark payment confirmed with no single deal
+      const { error: paymentError } = await supabase.from('payments').update({
+        match_status: 'confirmed',
+        matched_deal_id: null,
+        confirmed_by: 'manual',
+        confirmed_at: new Date().toISOString(),
+      }).eq('id', payment.id)
+      if (paymentError) throw paymentError
+
+      // 2. Insert allocation rows
+      const { error: allocError } = await supabase.from('payment_allocations').insert(
+        parsed.map(a => ({
+          payment_id: payment.id,
+          deal_id: a.dealId,
+          allocated_amount: a.amount,
+          paypal_fee: paypalFee > 0 ? Math.round((paypalFee * (a.amount / totalAllocated)) * 100) / 100 : 0,
+        }))
+      )
+      if (allocError) throw allocError
+
+      // 3. Disbursements + deal status per deal
+      for (const alloc of parsed) {
+        const deal = openDeals.find((d: any) => d.id === alloc.dealId)
+        if (!deal) continue
+
+        const proratedFee = paypalFee > 0
+          ? Math.round((paypalFee * (alloc.amount / totalAllocated)) * 100) / 100
+          : 0
+
+        const { data: existingDisbs } = await supabase
+          .from('disbursements')
+          .select('id, amount, recipient_type')
+          .eq('deal_id', deal.id)
+
+        if (!existingDisbs || existingDisbs.length === 0) {
+          const { error: disbError } = await supabase.from('disbursements').insert([
+            {
+              deal_id: deal.id,
+              payment_id: payment.id,
+              recipient_type: 'creator',
+              recipient_name: deal.creator?.stage_name || deal.creator?.legal_name,
+              amount: Math.max(0, deal.creator_payout - proratedFee),
+              status: 'pending_approval',
+            },
+            {
+              deal_id: deal.id,
+              payment_id: payment.id,
+              recipient_type: 'tsp',
+              recipient_name: 'TSP Talent',
+              amount: deal.tsp_total,
+              status: 'pending_approval',
+            },
+          ])
+          if (disbError) throw disbError
+        } else if (proratedFee > 0) {
+          const creatorDisb = existingDisbs.find((d: any) => d.recipient_type === 'creator')
+          if (creatorDisb) {
+            await supabase.from('disbursements').update({
+              amount: Math.max(0, creatorDisb.amount - proratedFee),
+            }).eq('id', creatorDisb.id)
+          }
+        }
+
+        // Deal status: sum direct payments + allocations
+        const [{ data: directPayments }, { data: dealAllocs }] = await Promise.all([
+          supabase.from('payments').select('amount').eq('matched_deal_id', deal.id).eq('match_status', 'confirmed'),
+          supabase.from('payment_allocations').select('allocated_amount').eq('deal_id', deal.id),
+        ])
+        const totalConfirmed =
+          (directPayments || []).reduce((s: number, p: any) => s + p.amount, 0) +
+          (dealAllocs || []).reduce((s: number, a: any) => s + a.allocated_amount, 0)
+
+        await supabase.from('deals').update({
+          status: totalConfirmed >= deal.brand_rate ? 'payment_received' : 'partial_payment_received',
+        }).eq('id', deal.id)
+      }
+
+      setPayments(prev => prev.filter(p => p.id !== payment.id))
+      logActivity({
+        action: 'Split payment confirmed',
+        entity_type: 'payment',
+        entity_id: payment.id,
+        entity_label: `${payment.sender_name} split across ${parsed.length} deals`,
+        metadata: { deal_ids: parsed.map(a => a.dealId), amounts: parsed.map(a => a.amount) },
+      })
+      toast.success(`Split across ${parsed.length} deals — disbursements queued`)
+      router.refresh()
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+
+    setLoadingId(null)
+  }
+
+  // ── Confirm single deal match ──────────────────────────────────────────────
 
   async function confirmMatch(payment: any) {
     const dealId = selectedDeals[payment.id]
@@ -49,7 +208,6 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
     setLoadingId(payment.id)
 
     try {
-      // 1. Update payment
       const { error: paymentError } = await supabase.from('payments').update({
         match_status: 'confirmed',
         matched_deal_id: dealId,
@@ -60,7 +218,6 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
 
       if (paymentError) throw paymentError
 
-      // 2. One disbursement per deal — create on first payment, update fee on subsequent ones
       const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
 
       const { data: existingDisbs } = await supabase
@@ -89,7 +246,6 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
         ])
         if (disbError) throw disbError
       } else if (paypalFee > 0) {
-        // Subsequent payment with a fee — subtract it from the existing creator disbursement
         const creatorDisb = existingDisbs.find((d: any) => d.recipient_type === 'creator')
         if (creatorDisb) {
           await supabase.from('disbursements').update({
@@ -98,7 +254,6 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
         }
       }
 
-      // 3. Update deal status based on cumulative payments
       const { data: allPayments } = await supabase
         .from('payments')
         .select('amount')
@@ -109,21 +264,19 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
         status: totalConfirmed >= deal.brand_rate ? 'payment_received' : 'partial_payment_received',
       }).eq('id', deal.id)
 
-      // Remove from queue
       setPayments(prev => prev.filter(p => p.id !== payment.id))
       logActivity({ action: 'Payment match confirmed', entity_type: 'payment', entity_id: payment.id, entity_label: `${payment.sender_name} → ${deal.deal_id}`, metadata: { deal_id: deal.id, deal_status_before: deal.status, prev_match_status: payment.match_status || 'ai_suggested' } })
 
       toast.success(`Matched to ${deal.deal_id} — disbursements queued`)
 
-      // Propose brand profile updates if there's anything new to learn
       const brand = deal.brand
       let hasBrandUpdate = false
       if (brand) {
         const norm = (s: string) => s.trim().toLowerCase()
         const aliases: string[] = brand.aliases || []
         const methods: string[] = brand.payment_methods || []
-        const hasNewAlias = norm(payment.sender_name) !== norm(brand.brand_name) && !aliases.some(a => norm(a) === norm(payment.sender_name))
-        const hasNewMethod = payment.source && !methods.some(m => norm(m) === norm(payment.source))
+        const hasNewAlias = norm(payment.sender_name) !== norm(brand.brand_name) && !aliases.some((a: string) => norm(a) === norm(payment.sender_name))
+        const hasNewMethod = payment.source && !methods.some((m: string) => norm(m) === norm(payment.source))
         if (hasNewAlias || hasNewMethod) {
           hasBrandUpdate = true
           setBrandUpdate({
@@ -137,8 +290,6 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
         }
       }
 
-      // Only refresh immediately if no brand update modal is pending
-      // If there is one, refresh happens after the modal is dismissed
       if (!hasBrandUpdate) router.refresh()
     } catch (err: any) {
       toast.error(err.message)
@@ -246,6 +397,11 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
           const isRejecting = loadingId === payment.id + '-reject'
           const isIgnoring = loadingId === payment.id + '-ignore'
           const isReanalyzing = reanalyzingId === payment.id
+          const isSplitMode = splitModeIds.has(payment.id)
+          const rows = splitAllocations[payment.id] || []
+          const totalAllocated = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+          const remaining = payment.amount - totalAllocated
+          const splitReady = Math.abs(remaining) <= 0.01 && rows.every(r => r.dealId && parseFloat(r.amount) > 0)
 
           return (
             <div key={payment.id} className="bg-[#1A1D27] border border-[#2A2D3E] rounded-xl overflow-hidden">
@@ -312,72 +468,185 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
 
                 {/* RIGHT: Match Action */}
                 <div className="p-5">
-                  <p className="text-xs text-[#8B91A8] uppercase tracking-wider mb-3">Assign Deal</p>
-                  <div className="space-y-3">
-                    <Select
-                      value={selectedDeals[payment.id] || ''}
-                      onChange={e => setSelectedDeals(prev => ({ ...prev, [payment.id]: e.target.value }))}
-                      options={dealOptions}
-                      placeholder="Select a deal..."
-                    />
-
-                    {selectedDeals[payment.id] && (() => {
-                      const deal = openDeals.find((d: any) => d.id === selectedDeals[payment.id])
-                      if (!deal) return null
-                      const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
-                      const adjustedCreatorPayout = Math.max(0, deal.creator_payout - paypalFee)
-                      return (
-                        <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 text-xs space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-[#5A6080]">Creator payout</span>
-                            <span className="font-mono text-[#00D084]">{formatCurrency(adjustedCreatorPayout)}</span>
-                          </div>
-                          {paypalFee > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-[#5A6080]">PayPal fee deducted</span>
-                              <span className="font-mono text-[#FF4D6A]">−{formatCurrency(paypalFee)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span className="text-[#5A6080]">TSP total</span>
-                            <span className="font-mono text-[#00E5FF]">{formatCurrency(deal.tsp_total)}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-[#2A2D3E] pt-1 mt-1">
-                            <span className="text-[#5A6080]">Commission</span>
-                            <span className="text-[#8B91A8]">{deal.tsp_commission_pct}%</span>
-                          </div>
-                        </div>
-                      )
-                    })()}
-
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        onClick={() => confirmMatch(payment)}
-                        loading={isLoading}
-                        disabled={!selectedDeals[payment.id] || isRejecting || isIgnoring}
-                        className="flex-1 justify-center"
-                      >
-                        <CheckCircle className="w-4 h-4" /> Confirm
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={() => rejectMatch(payment)}
-                        loading={isRejecting}
-                        disabled={isLoading || isIgnoring}
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => ignorePayment(payment)}
-                        loading={isIgnoring}
-                        disabled={isLoading || isRejecting}
-                        title="Ignore this payment"
-                      >
-                        <Ban className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs text-[#8B91A8] uppercase tracking-wider">
+                      {isSplitMode ? 'Split Across Deals' : 'Assign Deal'}
+                    </p>
+                    <button
+                      onClick={() => isSplitMode ? exitSplitMode(payment.id) : enterSplitMode(payment.id)}
+                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                        isSplitMode
+                          ? 'bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30'
+                          : 'bg-[#2A2D3E] text-[#8B91A8] hover:text-[#F0F2F8] border border-[#3A3D50]'
+                      }`}
+                    >
+                      <Scissors className="w-3 h-3" />
+                      {isSplitMode ? 'Single Deal' : 'Split'}
+                    </button>
                   </div>
+
+                  {!isSplitMode ? (
+                    // ── Single deal mode ─────────────────────────────────────
+                    <div className="space-y-3">
+                      <Select
+                        value={selectedDeals[payment.id] || ''}
+                        onChange={e => setSelectedDeals(prev => ({ ...prev, [payment.id]: e.target.value }))}
+                        options={dealOptions}
+                        placeholder="Select a deal..."
+                      />
+
+                      {selectedDeals[payment.id] && (() => {
+                        const deal = openDeals.find((d: any) => d.id === selectedDeals[payment.id])
+                        if (!deal) return null
+                        const paypalFee = Math.abs(parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0)
+                        const adjustedCreatorPayout = Math.max(0, deal.creator_payout - paypalFee)
+                        return (
+                          <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-[#5A6080]">Creator payout</span>
+                              <span className="font-mono text-[#00D084]">{formatCurrency(adjustedCreatorPayout)}</span>
+                            </div>
+                            {paypalFee > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-[#5A6080]">PayPal fee deducted</span>
+                                <span className="font-mono text-[#FF4D6A]">−{formatCurrency(paypalFee)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-[#5A6080]">TSP total</span>
+                              <span className="font-mono text-[#00E5FF]">{formatCurrency(deal.tsp_total)}</span>
+                            </div>
+                            <div className="flex justify-between border-t border-[#2A2D3E] pt-1 mt-1">
+                              <span className="text-[#5A6080]">Commission</span>
+                              <span className="text-[#8B91A8]">{deal.tsp_commission_pct}%</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => confirmMatch(payment)}
+                          loading={isLoading}
+                          disabled={!selectedDeals[payment.id] || isRejecting || isIgnoring}
+                          className="flex-1 justify-center"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Confirm
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => rejectMatch(payment)}
+                          loading={isRejecting}
+                          disabled={isLoading || isIgnoring}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => ignorePayment(payment)}
+                          loading={isIgnoring}
+                          disabled={isLoading || isRejecting}
+                          title="Ignore this payment"
+                        >
+                          <Ban className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // ── Split mode ───────────────────────────────────────────
+                    <div className="space-y-3">
+                      {/* Running balance */}
+                      <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-[#5A6080]">Total payment</span>
+                          <span className="font-mono text-[#F0F2F8]">{formatCurrency(payment.amount)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[#5A6080]">Allocated</span>
+                          <span className="font-mono text-[#00D084]">{formatCurrency(totalAllocated)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-[#2A2D3E] pt-1 mt-1">
+                          <span className="text-[#5A6080]">Remaining</span>
+                          <span className={`font-mono font-semibold ${Math.abs(remaining) <= 0.01 ? 'text-[#00D084]' : remaining < 0 ? 'text-[#FF4D6A]' : 'text-[#FFB800]'}`}>
+                            {Math.abs(remaining) <= 0.01 ? '✓ $0.00' : remaining < 0 ? `−${formatCurrency(Math.abs(remaining))} over` : formatCurrency(remaining)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Allocation rows */}
+                      <div className="space-y-2">
+                        {rows.map((row, i) => (
+                          <div key={row.id} className="flex gap-2 items-center">
+                            <select
+                              value={row.dealId}
+                              onChange={e => updateSplitRow(payment.id, row.id, 'dealId', e.target.value)}
+                              className="flex-1 min-w-0 bg-[#0F1117] border border-[#2A2D3E] rounded-md px-2 py-1.5 text-xs text-[#F0F2F8] focus:outline-none focus:border-[#00E5FF] transition-colors"
+                            >
+                              <option value="">Deal {i + 1}…</option>
+                              {getFilteredDealOptions(payment.id, row.id).map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                              {row.dealId && !getFilteredDealOptions(payment.id, row.id).find(o => o.value === row.dealId) && (
+                                <option value={row.dealId}>{dealOptions.find(o => o.value === row.dealId)?.label}</option>
+                              )}
+                            </select>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={row.amount}
+                              onChange={e => updateSplitRow(payment.id, row.id, 'amount', e.target.value)}
+                              placeholder="0.00"
+                              className="w-20 shrink-0 bg-[#0F1117] border border-[#2A2D3E] rounded-md px-2 py-1.5 text-xs text-[#F0F2F8] font-mono focus:outline-none focus:border-[#00E5FF] transition-colors"
+                            />
+                            {rows.length > 2 && (
+                              <button
+                                onClick={() => removeSplitRow(payment.id, row.id)}
+                                className="text-[#5A6080] hover:text-[#FF4D6A] transition-colors shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => addSplitRow(payment.id)}
+                        className="flex items-center gap-1 text-xs text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add deal
+                      </button>
+
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => confirmSplit(payment)}
+                          loading={isLoading}
+                          disabled={!splitReady || isRejecting || isIgnoring}
+                          className="flex-1 justify-center"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Confirm Split
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => rejectMatch(payment)}
+                          loading={isRejecting}
+                          disabled={isLoading || isIgnoring}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => ignorePayment(payment)}
+                          loading={isIgnoring}
+                          disabled={isLoading || isRejecting}
+                          title="Ignore this payment"
+                        >
+                          <Ban className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
