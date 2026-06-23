@@ -15,9 +15,10 @@ import Link from 'next/link'
 
 interface Props {
   initialDisbursements: any[]
+  paypalFeesByDeal: Record<string, number>
 }
 
-export function DisbursementsClient({ initialDisbursements }: Props) {
+export function DisbursementsClient({ initialDisbursements, paypalFeesByDeal }: Props) {
   const [disbursements, setDisbursements] = useState<any[]>(initialDisbursements)
 
   function handleExportCSV() {
@@ -372,7 +373,7 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                             <StatusBadge status={d.status} />
                           </div>
                           {d.recipient_type === 'creator' && (() => {
-                            const totalFee = (d.deal?.payments ?? []).reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+                            const totalFee = paypalFeesByDeal[d.deal_id] || 0
                             return totalFee > 0 ? (
                               <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(totalFee)} PayPal fee deducted</p>
                             ) : null
@@ -449,7 +450,7 @@ export function DisbursementsClient({ initialDisbursements }: Props) {
                     <td className="py-3 px-4">
                       <span className="font-mono text-[#F0F2F8]">{formatCurrency(d.amount)}</span>
                       {d.recipient_type === 'creator' && (() => {
-                        const totalFee = (d.deal?.payments ?? []).reduce((s: number, p: any) => s + Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0), 0)
+                        const totalFee = paypalFeesByDeal[d.deal_id] || 0
                         return totalFee > 0 ? (
                           <p className="text-[10px] text-[#FF4D6A] font-mono mt-0.5">−{formatCurrency(totalFee)} PayPal fee</p>
                         ) : null

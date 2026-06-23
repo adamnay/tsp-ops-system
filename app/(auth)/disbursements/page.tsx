@@ -4,14 +4,30 @@ import { DisbursementsClient } from './DisbursementsClient'
 export default async function DisbursementsPage() {
   const supabase = createClient()
 
-  const { data: disbursements } = await supabase
-    .from('disbursements')
-    .select(`
-      *,
-      deal:deals(deal_id, campaign_name, status, brand_rate, brand:brands(brand_name), creator:creators(id, legal_name, stage_name, payment_method), payments:payments(raw_import_data)),
-      payment:payments(amount, payment_date, sender_name, raw_import_data)
-    `)
-    .order('created_at', { ascending: false })
+  const [{ data: disbursements }, { data: allPayments }] = await Promise.all([
+    supabase
+      .from('disbursements')
+      .select(`
+        *,
+        deal:deals(deal_id, campaign_name, status, brand_rate, brand:brands(brand_name), creator:creators(id, legal_name, stage_name, payment_method)),
+        payment:payments(amount, payment_date, sender_name, raw_import_data)
+      `)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('payments')
+      .select('matched_deal_id, raw_import_data')
+      .not('matched_deal_id', 'is', null)
+      .eq('match_status', 'confirmed'),
+  ])
 
-  return <DisbursementsClient initialDisbursements={disbursements ?? []} />
+  // Build deal_id -> total PayPal fees map
+  const paypalFeesByDeal: Record<string, number> = {}
+  for (const p of allPayments ?? []) {
+    const fee = Math.abs(parseFloat(p.raw_import_data?.paypal_fee || '0') || 0)
+    if (fee > 0) {
+      paypalFeesByDeal[p.matched_deal_id] = (paypalFeesByDeal[p.matched_deal_id] || 0) + fee
+    }
+  }
+
+  return <DisbursementsClient initialDisbursements={disbursements ?? []} paypalFeesByDeal={paypalFeesByDeal} />
 }
