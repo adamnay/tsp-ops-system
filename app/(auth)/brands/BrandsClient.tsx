@@ -102,7 +102,7 @@ export function BrandsClient({ initialBrands }: Props) {
       </div>
 
       <div className="bg-[#1A1D27] border border-[#2A2D3E] rounded-lg overflow-hidden">
-        <DataTable columns={columns} data={brands.filter(b => !search || b.brand_name?.toLowerCase().includes(search.toLowerCase()) || b.contact_email?.toLowerCase().includes(search.toLowerCase()))} onRowClick={(row) => router.push(`/brands/${row.id}`)}
+        <DataTable columns={columns} data={brands.filter(b => !search || b.brand_name?.toLowerCase().includes(search.toLowerCase()) || b.primary_contact_email?.toLowerCase().includes(search.toLowerCase()))} onRowClick={(row) => router.push(`/brands/${row.id}`)}
           emptyState={<EmptyState icon={Building2} title="No brands yet" description="Add your first brand partner" action={<Button onClick={() => setModalOpen(true)}><Plus className="w-4 h-4" /> Add Brand</Button>} />}
         />
       </div>
