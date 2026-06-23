@@ -201,7 +201,7 @@ export function BrandDetailClient({ brand: initialBrand, deals, confirmedPayment
                     type="button"
                     onClick={() => setForm(f => ({
                       ...f,
-                      payment_methods: active ? f.payment_methods.filter(x => x !== m) : [...f.payment_methods, m],
+                      payment_methods: active ? f.payment_methods.filter((x: string) => x !== m) : [...f.payment_methods, m],
                     }))}
                     className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
                       active
