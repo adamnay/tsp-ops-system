@@ -68,13 +68,16 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
         .limit(1)
 
       if (!existingDisb || existingDisb.length === 0) {
+        const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
+        const creatorAmount = Math.max(0, deal.creator_payout - paypalFee)
+
         const { error: disbError } = await supabase.from('disbursements').insert([
           {
             deal_id: deal.id,
             payment_id: payment.id,
             recipient_type: 'creator',
             recipient_name: deal.creator?.stage_name || deal.creator?.legal_name,
-            amount: deal.creator_payout,
+            amount: creatorAmount,
             status: 'pending_approval',
           },
           {
@@ -315,12 +318,20 @@ export function ReconcileClient({ initialPayments, openDeals }: Props) {
                     {selectedDeals[payment.id] && (() => {
                       const deal = openDeals.find((d: any) => d.id === selectedDeals[payment.id])
                       if (!deal) return null
+                      const paypalFee = parseFloat(payment.raw_import_data?.paypal_fee || '0') || 0
+                      const adjustedCreatorPayout = Math.max(0, deal.creator_payout - paypalFee)
                       return (
                         <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-3 text-xs space-y-1">
                           <div className="flex justify-between">
                             <span className="text-[#5A6080]">Creator payout</span>
-                            <span className="font-mono text-[#00D084]">{formatCurrency(deal.creator_payout)}</span>
+                            <span className="font-mono text-[#00D084]">{formatCurrency(adjustedCreatorPayout)}</span>
                           </div>
+                          {paypalFee > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[#5A6080]">PayPal fee deducted</span>
+                              <span className="font-mono text-[#FF4D6A]">−{formatCurrency(paypalFee)}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <span className="text-[#5A6080]">TSP total</span>
                             <span className="font-mono text-[#00E5FF]">{formatCurrency(deal.tsp_total)}</span>
