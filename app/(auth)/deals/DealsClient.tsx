@@ -507,7 +507,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
             {SECTIONS.map(section => {
               const sectionDeals = activeDeals
                 .filter((d: any) => section.statuses.includes(d.status))
-                .sort((a: any, b: any) => (b.sort_order ?? 0) - (a.sort_order ?? 0))
+                .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
               return (
                 <div key={section.label}>
                   <div className="flex items-center gap-3 mb-2">
