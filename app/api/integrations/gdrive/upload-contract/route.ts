@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { google } from 'googleapis'
+import { Readable } from 'stream'
 
 export const runtime = 'nodejs'
 
@@ -43,9 +45,6 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON' }, { status: 500 })
     }
-
-    const { google } = await import('googleapis')
-    const { Readable } = await import('stream')
 
     const auth = new google.auth.GoogleAuth({
       credentials,
