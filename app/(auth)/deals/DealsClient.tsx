@@ -256,7 +256,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
         brand_rate: parseFloat(form.brand_rate),
         creator_rate: parseFloat(form.creator_rate),
         tsp_commission_pct: parseFloat(form.tsp_commission_pct),
-        status: GROUP_STATUS_MAP[form.group] ?? 'active',
+        status: months > 1 ? (i === 0 ? 'active' : 'draft') : (GROUP_STATUS_MAP[form.group] ?? 'active'),
         payment_reference: paymentRef,
         campaign_months: months,
         campaign_month_number: i + 1,
