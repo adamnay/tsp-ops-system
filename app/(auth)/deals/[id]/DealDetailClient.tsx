@@ -81,9 +81,6 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       brand_rate: brandRate,
       creator_rate: creatorRate,
       tsp_commission_pct: commPct,
-      tsp_margin: tspMargin,
-      tsp_total: tspTotal,
-      creator_payout: creatorPayout,
       payment_reference: editForm.payment_reference || null,
       notes: editForm.notes || null,
     }
