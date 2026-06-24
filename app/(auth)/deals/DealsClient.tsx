@@ -220,13 +220,17 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
 
     // Unique suffix per campaign so same brand+creator can have multiple deals
     const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const baseDealId = generateDealId(brand.brand_name, creator.stage_name || creator.legal_name) + `-${rand}`
+    const baseWithoutMonth = generateDealId(brand.brand_name, creator.stage_name || creator.legal_name) + `-${rand}`
 
     const newDeals: any[] = []
     for (let i = 0; i < months; i++) {
       const monthStr = addMonthsToDate(form.campaign_start_month, i)
       const monthName = monthLabel(monthStr)
-      const dealId = baseDealId + (months > 1 ? `-M${i + 1}` : '')
+      const [my, mm] = monthStr.split('-').map(Number)
+      const monthAbbr = new Date(my, mm - 1, 1).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+      // Insert month after year: TSP-2026-JUN-BRAND-CREATOR-RAND
+      const withMonth = baseWithoutMonth.replace(/^(TSP-\d{4}-)/, `$1${monthAbbr}-`)
+      const dealId = withMonth + (months > 1 ? `-M${i + 1}` : '')
       const paymentRef = generatePaymentReference(dealId)
 
       const autoName = `${brand.brand_name} × ${creator.stage_name || creator.legal_name}`
