@@ -116,11 +116,6 @@ export async function generateDealPdfBytes(deal: any): Promise<Uint8Array> {
   }
 
   // Footer
-  const generatedAt = new Date().toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-    month: 'long', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  }) + ' EST'
   page.drawLine({ start: { x: 50, y: 52 }, end: { x: 562, y: 52 }, thickness: 1, color: lightGray })
   page.drawText(`Generated ${generatedAt} · TSP Talent`, {
     x: 50, y: 36, font: regular, size: 8, color: hex('#9CA3AF'),
