@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
 import { createServiceClient } from '@/lib/supabase/service'
-import { Readable } from 'stream'
+
+export const runtime = 'nodejs'
 
 function getMimeType(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase()
@@ -22,12 +22,23 @@ export async function POST(req: NextRequest) {
     const folderId = process.env.GOOGLE_DRIVE_CONTRACTS_FOLDER_ID
 
     if (!serviceAccountJson || !folderId) {
-      return NextResponse.json({ error: 'Google Drive not configured' }, { status: 503 })
+      return NextResponse.json({ error: 'Google Drive not configured — set GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_DRIVE_CONTRACTS_FOLDER_ID in Vercel' }, { status: 503 })
     }
 
     const { filePath, fileName } = await req.json()
     if (!filePath || !fileName) {
       return NextResponse.json({ error: 'filePath and fileName required' }, { status: 400 })
+    }
+
+    // Parse credentials — handle escaped newlines in private_key
+    let credentials: any
+    try {
+      credentials = JSON.parse(serviceAccountJson)
+      if (credentials.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n')
+      }
+    } catch {
+      return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON' }, { status: 500 })
     }
 
     // Download file from Supabase storage
@@ -41,16 +52,17 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await blob.arrayBuffer())
-    const readable = Readable.from(buffer)
 
-    // Authenticate with Google
+    // Lazy-load googleapis to avoid edge runtime bundling issues
+    const { google } = await import('googleapis')
+    const { Readable } = await import('stream')
+
     const auth = new google.auth.GoogleAuth({
-      credentials: JSON.parse(serviceAccountJson),
+      credentials,
       scopes: ['https://www.googleapis.com/auth/drive.file'],
     })
     const drive = google.drive({ version: 'v3', auth })
 
-    // Upload to Drive folder
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
@@ -58,7 +70,7 @@ export async function POST(req: NextRequest) {
       },
       media: {
         mimeType: getMimeType(fileName),
-        body: readable,
+        body: Readable.from(buffer),
       },
       fields: 'id, name, webViewLink',
     })
@@ -69,7 +81,7 @@ export async function POST(req: NextRequest) {
       url: response.data.webViewLink,
     })
   } catch (e: any) {
-    console.error('Google Drive upload error:', e.message)
+    console.error('Google Drive upload error:', e.message, e.stack)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
