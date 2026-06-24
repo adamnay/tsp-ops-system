@@ -24,10 +24,17 @@ export async function generateDealPdfBytes(deal: any): Promise<Uint8Array> {
   const green = hex('#059669')
   const lightGray = hex('#E5E7EB')
 
+  const generatedAt = new Date().toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }) + ' EST'
+
   let y = height - 50
 
   // Header
   page.drawText('TSP Talent — Deal Summary', { x: 50, y, font: bold, size: 18, color: dark })
+  page.drawText(generatedAt, { x: 562 - regular.widthOfTextAtSize(generatedAt, 9), y: y + 3, font: regular, size: 9, color: gray })
   y -= 22
   page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
   y -= 20
