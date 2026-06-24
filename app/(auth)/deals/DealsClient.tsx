@@ -281,7 +281,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
         ? newDeals[0].deal_id.replace(/-M\d+$/, '') + newDeals.map((_, idx) => `-M${idx + 1}`).join('')
         : null
 
-      // Upload contract if provided — link to all deals in this campaign
+      // Upload contract to Supabase storage (linked to all deals in this campaign)
       if (contractFile) {
         const primaryDealId = newDeals[0].deal_id
         const ext = contractFile.name.includes('.') ? '.' + contractFile.name.split('.').pop() : ''
@@ -296,31 +296,20 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
           newDeals.forEach(d => { d.contract_file_path = path })
           toast.success('Contract uploaded')
           logActivity({ action: 'Contract uploaded', entity_type: 'deal', entity_id: newDeals[0].id, entity_label: primaryDealId })
-          const driveForm = new FormData()
-          driveForm.append('deal', JSON.stringify(newDeals[0]))
-          driveForm.append('contractFile', contractFile)
-          driveForm.append('contractFileName', contractFile.name)
-          if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
-          fetch('/api/integrations/gdrive/sync-deal', {
-            method: 'POST',
-            body: driveForm,
-          }).then(async r => {
-            const json = await r.json().catch(() => ({}))
-            if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
-            else if (json.pdfError) toast.error(`Contract uploaded but PDF failed: ${json.pdfError}`)
-            else toast.success('Contract and summary backed up to Google Drive')
-          }).catch(err => toast.error(`Drive sync error: ${err.message}`))
         }
       }
 
       setDeals([...newDeals, ...deals])
       toast.success(months > 1 ? `${months} monthly deals created` : `Deal created`)
 
-      // Sync each deal to Drive (skip M1 if contract already handled it)
-      newDeals.forEach((d, idx) => {
-        if (contractFile && idx === 0) return
+      // Sync every deal to Drive — contract goes into each month's folder
+      newDeals.forEach((d) => {
         const driveForm = new FormData()
         driveForm.append('deal', JSON.stringify(d))
+        if (contractFile) {
+          driveForm.append('contractFile', contractFile)
+          driveForm.append('contractFileName', contractFile.name)
+        }
         if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
         fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: driveForm }).catch(() => {})
       })
