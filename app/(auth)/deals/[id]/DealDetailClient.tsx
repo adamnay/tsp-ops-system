@@ -71,18 +71,17 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       toast.success('Contract uploaded')
       logActivity({ action: 'Contract uploaded', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
       toast('Syncing to Drive…')
-      supabase.storage.from('contracts').createSignedUrl(path, 300).then(({ data: signed }) => {
-        if (!signed?.signedUrl) return
-        fetch('/api/integrations/gdrive/upload-contract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signedUrl: signed.signedUrl, fileName: file.name }),
-        }).then(async r => {
-          const json = await r.json().catch(() => ({}))
-          if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
-          else toast.success('Backed up to Google Drive')
-        }).catch(err => toast.error(`Drive sync error: ${err.message}`))
-      })
+      const driveForm = new FormData()
+      driveForm.append('file', file)
+      driveForm.append('fileName', file.name)
+      fetch('/api/integrations/gdrive/upload-contract', {
+        method: 'POST',
+        body: driveForm,
+      }).then(async r => {
+        const json = await r.json().catch(() => ({}))
+        if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
+        else toast.success('Backed up to Google Drive')
+      }).catch(err => toast.error(`Drive sync error: ${err.message}`))
     }
     setUploadingContract(false)
     if (e.target) e.target.value = ''

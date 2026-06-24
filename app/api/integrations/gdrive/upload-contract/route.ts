@@ -24,19 +24,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Google Drive not configured' }, { status: 503 })
     }
 
-    const { signedUrl, fileName } = await req.json()
-    if (!signedUrl || !fileName) {
-      return NextResponse.json({ error: 'signedUrl and fileName required' }, { status: 400 })
+    const formData = await req.formData()
+    const file = formData.get('file') as File | null
+    const fileName = formData.get('fileName') as string | null
+
+    if (!file || !fileName) {
+      return NextResponse.json({ error: 'file and fileName required' }, { status: 400 })
     }
 
-    // Download file via the signed URL generated on the client
-    const fileRes = await fetch(signedUrl)
-    if (!fileRes.ok) {
-      return NextResponse.json({ error: `Failed to fetch file: ${fileRes.status}` }, { status: 500 })
-    }
-    const buffer = Buffer.from(await fileRes.arrayBuffer())
+    const buffer = Buffer.from(await file.arrayBuffer())
 
-    // Parse service account credentials
     let credentials: any
     try {
       credentials = JSON.parse(serviceAccountJson)
