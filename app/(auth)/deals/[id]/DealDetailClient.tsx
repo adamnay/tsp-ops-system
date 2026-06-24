@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Copy, Upload, FileCheck, Download } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, FileCheck, Download, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logActivity } from '@/lib/activity'
 
@@ -141,6 +141,14 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
           </div>
           <p className="font-mono text-xs text-[#5A6080] mt-0.5">{deal.deal_id}</p>
         </div>
+        <a
+          href={`/api/deals/${deal.id}/summary-pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs text-[#8B91A8] hover:text-[#F0F2F8] border border-[#2A2D3E] hover:border-[#8B91A8] rounded-lg px-3 py-2 transition-colors whitespace-nowrap"
+        >
+          <FileText className="w-3.5 h-3.5" /> Deal Summary
+        </a>
         <div className="w-44">
           <Select value={deal.status} onChange={e => updateStatus(e.target.value)} options={STATUS_OPTIONS} />
         </div>
