@@ -97,7 +97,13 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
   function syncDealPdf(updatedDeal: any) {
     const form = new FormData()
     form.append('deal', JSON.stringify(updatedDeal))
-    fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: form }).catch(() => {})
+    fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: form })
+      .then(async r => {
+        const json = await r.json().catch(() => ({}))
+        if (!r.ok) toast.error(`Drive PDF sync failed: ${json.error || r.status}`)
+        else if (json.pdfError) toast.error(`Drive PDF failed: ${json.pdfError}`)
+      })
+      .catch(err => toast.error(`Drive PDF sync error: ${err.message}`))
   }
 
   function sanitizeFileName(name: string): string {
