@@ -1,82 +1,125 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 export const runtime = 'nodejs'
 
-async function generateDealPdf(deal: any): Promise<Buffer> {
-  const { default: PDFDocument } = await import('pdfkit')
-  return new Promise<Buffer>((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: 'LETTER' })
-    const chunks: Buffer[] = []
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
+function hex(h: string) {
+  const n = parseInt(h.replace('#', ''), 16)
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
 
-    const fmt = (n: number) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    const statusLabel = (s: string) => s?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || '—'
+const fmt = (n: number) =>
+  `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const statusLabel = (s: string) =>
+  s?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || '—'
 
-    doc.fontSize(20).font('Helvetica-Bold').fillColor('#111827').text('TSP Talent — Deal Summary', 50, 50)
-    doc.moveTo(50, 78).lineTo(562, 78).strokeColor('#E5E7EB').stroke()
+export async function generateDealPdfBytes(deal: any): Promise<Uint8Array> {
+  const doc = await PDFDocument.create()
+  const page = doc.addPage([612, 792])
+  const { height } = page.getSize()
 
-    doc.fontSize(11).font('Helvetica').fillColor('#6B7280').text('Deal ID', 50, 90)
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('#111827').text(deal.deal_id || '—', 50, 105)
-    doc.fontSize(11).font('Helvetica').fillColor('#6B7280').text('Status', 300, 90)
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('#1D4ED8').text(statusLabel(deal.status), 300, 105)
+  const regular = await doc.embedFont(StandardFonts.Helvetica)
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
 
-    doc.fontSize(11).font('Helvetica').fillColor('#6B7280').text('Campaign', 50, 135)
-    doc.fontSize(14).font('Helvetica-Bold').fillColor('#111827').text(deal.campaign_name || '—', 50, 150)
+  const gray = hex('#6B7280')
+  const dark = hex('#111827')
+  const blue = hex('#1D4ED8')
+  const green = hex('#059669')
+  const lightGray = hex('#E5E7EB')
 
-    doc.moveTo(50, 178).lineTo(562, 178).strokeColor('#E5E7EB').stroke()
+  let y = height - 50
 
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#374151').text('Parties', 50, 190)
-    doc.fontSize(10).font('Helvetica').fillColor('#6B7280').text('Brand', 50, 210)
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#111827').text(deal.brand?.brand_name || '—', 50, 224)
-    doc.fontSize(10).font('Helvetica').fillColor('#6B7280').text('Creator', 300, 210)
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#111827').text(deal.creator?.stage_name || deal.creator?.legal_name || '—', 300, 224)
+  // Header
+  page.drawText('TSP Talent — Deal Summary', { x: 50, y, font: bold, size: 18, color: dark })
+  y -= 22
+  page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
+  y -= 20
 
-    doc.moveTo(50, 252).lineTo(562, 252).strokeColor('#E5E7EB').stroke()
+  // Deal ID + Status
+  page.drawText('Deal ID', { x: 50, y, font: regular, size: 9, color: gray })
+  page.drawText('Status', { x: 300, y, font: regular, size: 9, color: gray })
+  y -= 14
+  page.drawText(deal.deal_id || '—', { x: 50, y, font: bold, size: 11, color: dark })
+  page.drawText(statusLabel(deal.status), { x: 300, y, font: bold, size: 11, color: blue })
+  y -= 20
 
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#374151').text('Financials', 50, 264)
-    const fin = [
-      { label: 'Brand Rate', value: fmt(deal.brand_rate), color: '#111827' },
-      { label: 'Creator Rate', value: fmt(deal.creator_rate), color: '#111827' },
-      { label: 'Creator Payout', value: fmt(deal.creator_payout), color: '#059669' },
-      { label: 'TSP Commission', value: `${deal.tsp_commission_pct}%`, color: '#111827' },
-      { label: 'TSP Margin', value: fmt(deal.tsp_margin), color: '#111827' },
-      { label: 'TSP Total', value: fmt(deal.tsp_total), color: '#1D4ED8' },
-    ]
-    fin.forEach((f, i) => {
-      const col = i % 2 === 0 ? 50 : 300
-      const row = 284 + Math.floor(i / 2) * 40
-      doc.fontSize(10).font('Helvetica').fillColor('#6B7280').text(f.label, col, row)
-      doc.fontSize(13).font('Helvetica-Bold').fillColor(f.color).text(f.value, col, row + 14)
-    })
+  // Campaign
+  page.drawText('Campaign', { x: 50, y, font: regular, size: 9, color: gray })
+  y -= 14
+  page.drawText(deal.campaign_name || '—', { x: 50, y, font: bold, size: 13, color: dark })
+  y -= 20
 
-    const afterFin = 284 + Math.ceil(fin.length / 2) * 40
-    doc.moveTo(50, afterFin).lineTo(562, afterFin).strokeColor('#E5E7EB').stroke()
+  page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
+  y -= 16
 
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#374151').text('Details', 50, afterFin + 12)
-    const created = deal.created_at
-      ? new Date(deal.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-      : '—'
-    doc.fontSize(10).font('Helvetica').fillColor('#6B7280').text('Created', 50, afterFin + 32)
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#111827').text(created, 50, afterFin + 46)
-    doc.fontSize(10).font('Helvetica').fillColor('#6B7280').text('Payment Reference', 300, afterFin + 32)
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#111827').text(deal.payment_reference || '—', 300, afterFin + 46)
+  // Parties
+  page.drawText('Parties', { x: 50, y, font: bold, size: 11, color: hex('#374151') })
+  y -= 18
+  page.drawText('Brand', { x: 50, y, font: regular, size: 9, color: gray })
+  page.drawText('Creator', { x: 300, y, font: regular, size: 9, color: gray })
+  y -= 14
+  page.drawText(deal.brand?.brand_name || '—', { x: 50, y, font: bold, size: 11, color: dark })
+  page.drawText(deal.creator?.stage_name || deal.creator?.legal_name || '—', { x: 300, y, font: bold, size: 11, color: dark })
+  y -= 20
 
-    if (deal.notes) {
-      doc.moveTo(50, afterFin + 72).lineTo(562, afterFin + 72).strokeColor('#E5E7EB').stroke()
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#374151').text('Notes', 50, afterFin + 84)
-      doc.fontSize(11).font('Helvetica').fillColor('#374151').text(deal.notes, 50, afterFin + 100, { width: 512 })
-    }
+  page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
+  y -= 16
 
-    const footerY = doc.page.height - 50
-    doc.moveTo(50, footerY - 10).lineTo(562, footerY - 10).strokeColor('#E5E7EB').stroke()
-    doc.fontSize(9).font('Helvetica').fillColor('#9CA3AF')
-      .text(`Generated ${new Date().toLocaleString('en-US')} · TSP Talent`, 50, footerY, { align: 'center', width: 512 })
+  // Financials
+  page.drawText('Financials', { x: 50, y, font: bold, size: 11, color: hex('#374151') })
+  y -= 18
 
-    doc.end()
+  const fin = [
+    { label: 'Brand Rate', value: fmt(deal.brand_rate), color: dark },
+    { label: 'Creator Rate', value: fmt(deal.creator_rate), color: dark },
+    { label: 'Creator Payout', value: fmt(deal.creator_payout), color: green },
+    { label: 'TSP Commission', value: `${deal.tsp_commission_pct}%`, color: dark },
+    { label: 'TSP Margin', value: fmt(deal.tsp_margin), color: dark },
+    { label: 'TSP Total', value: fmt(deal.tsp_total), color: blue },
+  ]
+  for (let i = 0; i < fin.length; i += 2) {
+    const left = fin[i], right = fin[i + 1]
+    page.drawText(left.label, { x: 50, y, font: regular, size: 9, color: gray })
+    if (right) page.drawText(right.label, { x: 300, y, font: regular, size: 9, color: gray })
+    y -= 14
+    page.drawText(left.value, { x: 50, y, font: bold, size: 12, color: left.color })
+    if (right) page.drawText(right.value, { x: 300, y, font: bold, size: 12, color: right.color })
+    y -= 22
+  }
+
+  page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
+  y -= 16
+
+  // Details
+  page.drawText('Details', { x: 50, y, font: bold, size: 11, color: hex('#374151') })
+  y -= 18
+  const created = deal.created_at
+    ? new Date(deal.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : '—'
+  page.drawText('Created', { x: 50, y, font: regular, size: 9, color: gray })
+  page.drawText('Payment Reference', { x: 300, y, font: regular, size: 9, color: gray })
+  y -= 14
+  page.drawText(created, { x: 50, y, font: bold, size: 11, color: dark })
+  page.drawText(deal.payment_reference || '—', { x: 300, y, font: bold, size: 11, color: dark })
+  y -= 20
+
+  if (deal.notes) {
+    page.drawLine({ start: { x: 50, y }, end: { x: 562, y }, thickness: 1, color: lightGray })
+    y -= 16
+    page.drawText('Notes', { x: 50, y, font: bold, size: 11, color: hex('#374151') })
+    y -= 16
+    page.drawText(deal.notes.slice(0, 200), { x: 50, y, font: regular, size: 10, color: hex('#374151'), maxWidth: 512 })
+  }
+
+  // Footer
+  const footerY = 40
+  page.drawLine({ start: { x: 50, y: footerY + 12 }, end: { x: 562, y: footerY + 12 }, thickness: 1, color: lightGray })
+  page.drawText(`Generated ${new Date().toLocaleString('en-US')} · TSP Talent`, {
+    x: 50, y: footerY, font: regular, size: 8, color: hex('#9CA3AF'),
   })
+
+  return doc.save()
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -96,13 +139,13 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
     }
 
-    const pdfBuffer = await generateDealPdf(deal)
+    const pdfBytes = await generateDealPdfBytes(deal)
 
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    return new NextResponse(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${deal.deal_id}-summary.pdf"`,
-        'Content-Length': String(pdfBuffer.length),
+        'Content-Length': String(pdfBytes.length),
       },
     })
   } catch (e: any) {
