@@ -81,7 +81,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       }).then(async r => {
         const json = await r.json().catch(() => ({}))
         if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
-        else toast.success('Backed up to Google Drive')
+        else toast.success(`Drive: ${json.dealFolder} / folderId: ${json.dealFolderId}`)
       }).catch(err => toast.error(`Drive sync error: ${err.message}`))
     }
     setUploadingContract(false)

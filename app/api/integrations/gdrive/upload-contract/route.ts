@@ -91,6 +91,8 @@ export async function POST(req: NextRequest) {
       fileId: response.data.id,
       name: response.data.name,
       url: response.data.webViewLink,
+      dealFolder: dealName,
+      dealFolderId,
     })
   } catch (e: any) {
     console.error('Google Drive upload error:', e.message, e.stack)
