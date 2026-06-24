@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const fileName = formData.get('fileName') as string | null
+    const dealName = (formData.get('dealName') as string | null) || fileName || 'Unknown Deal'
 
     if (!file || !fileName) {
       return NextResponse.json({ error: 'file and fileName required' }, { status: 400 })
@@ -52,11 +53,32 @@ export async function POST(req: NextRequest) {
     })
     const drive = google.drive({ version: 'v3', auth })
 
+    // Find or create a subfolder named after the deal
+    const searchRes = await drive.files.list({
+      q: `name='${dealName}' and '${folderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      fields: 'files(id)',
+    })
+    let dealFolderId = searchRes.data.files?.[0]?.id
+    if (!dealFolderId) {
+      const newFolder = await drive.files.create({
+        supportsAllDrives: true,
+        requestBody: {
+          name: dealName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [folderId],
+        },
+        fields: 'id',
+      })
+      dealFolderId = newFolder.data.id!
+    }
+
     const response = await drive.files.create({
       supportsAllDrives: true,
       requestBody: {
         name: fileName,
-        parents: [folderId],
+        parents: [dealFolderId],
       },
       media: {
         mimeType: getMimeType(fileName),

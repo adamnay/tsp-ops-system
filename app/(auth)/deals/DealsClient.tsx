@@ -272,6 +272,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
           const driveForm = new FormData()
           driveForm.append('file', contractFile)
           driveForm.append('fileName', contractFile.name)
+          driveForm.append('dealName', primaryDealId)
           fetch('/api/integrations/gdrive/upload-contract', {
             method: 'POST',
             body: driveForm,
