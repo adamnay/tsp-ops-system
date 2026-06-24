@@ -287,6 +287,12 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
 
       setDeals([...newDeals, ...deals])
       toast.success(months > 1 ? `${months} monthly deals created` : `Deal created`)
+      // Fire-and-forget: create Drive folder + PDF summary for each new deal
+      newDeals.forEach(d => {
+        const form = new FormData()
+        form.append('deal', JSON.stringify(d))
+        fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: form }).catch(() => {})
+      })
       if (months > 1) {
         logActivity({ action: `${months}-month deal created`, entity_type: 'deal', entity_id: newDeals[0].id, entity_label: `${brand.brand_name} × ${creator.stage_name || creator.legal_name}` })
       } else {
