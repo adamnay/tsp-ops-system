@@ -70,6 +70,11 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       setDeal(data)
       toast.success('Contract uploaded')
       logActivity({ action: 'Contract uploaded', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
+      fetch('/api/integrations/gdrive/upload-contract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: path, fileName: file.name }),
+      }).catch(() => {})
     }
     setUploadingContract(false)
     if (e.target) e.target.value = ''
