@@ -7,8 +7,11 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
+import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Textarea'
+import { Modal } from '@/components/ui/Modal'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Copy, Upload, FileCheck, Download, FileText } from 'lucide-react'
+import { ArrowLeft, Copy, Upload, FileCheck, Download, FileText, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logActivity } from '@/lib/activity'
 
@@ -35,6 +38,16 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [uploadingContract, setUploadingContract] = useState(false)
   const [editingDate, setEditingDate] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editForm, setEditForm] = useState({
+    campaign_name: initialDeal.campaign_name || '',
+    brand_rate: String(initialDeal.brand_rate || ''),
+    creator_rate: String(initialDeal.creator_rate || ''),
+    tsp_commission_pct: String(initialDeal.tsp_commission_pct || '30'),
+    payment_reference: initialDeal.payment_reference || '',
+    notes: initialDeal.notes || '',
+  })
   const [dateValue, setDateValue] = useState(() => {
     const d = new Date(initialDeal.created_at)
     return d.toISOString().slice(0, 16) // 'YYYY-MM-DDTHH:mm'
@@ -51,6 +64,37 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
     toast.success('Date updated')
     logActivity({ action: 'Deal date edited', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
     syncDealPdf(data)
+  }
+
+  async function saveEdits() {
+    const brandRate = parseFloat(editForm.brand_rate) || 0
+    const creatorRate = parseFloat(editForm.creator_rate) || 0
+    const commPct = parseFloat(editForm.tsp_commission_pct) || 30
+    if (creatorRate > brandRate) return toast.error('Creator rate cannot exceed brand rate')
+    setEditSaving(true)
+    const tspMargin = brandRate - creatorRate
+    const tspCommission = creatorRate * commPct / 100
+    const tspTotal = tspMargin + tspCommission
+    const creatorPayout = creatorRate * (1 - commPct / 100)
+    const updates = {
+      campaign_name: editForm.campaign_name,
+      brand_rate: brandRate,
+      creator_rate: creatorRate,
+      tsp_commission_pct: commPct,
+      tsp_margin: tspMargin,
+      tsp_total: tspTotal,
+      creator_payout: creatorPayout,
+      payment_reference: editForm.payment_reference || null,
+      notes: editForm.notes || null,
+    }
+    const { data, error } = await supabase.from('deals').update(updates).eq('id', deal.id).select('*, brand:brands(*), creator:creators(*)').single()
+    if (error) { toast.error(error.message); setEditSaving(false); return }
+    setDeal(data)
+    setEditModalOpen(false)
+    toast.success('Deal updated')
+    logActivity({ action: 'Deal edited', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
+    syncDealPdf(data)
+    setEditSaving(false)
   }
 
   function syncDealPdf(updatedDeal: any) {
@@ -141,6 +185,12 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
           </div>
           <p className="font-mono text-xs text-[#5A6080] mt-0.5">{deal.deal_id}</p>
         </div>
+        <button
+          onClick={() => { setEditForm({ campaign_name: deal.campaign_name || '', brand_rate: String(deal.brand_rate || ''), creator_rate: String(deal.creator_rate || ''), tsp_commission_pct: String(deal.tsp_commission_pct || '30'), payment_reference: deal.payment_reference || '', notes: deal.notes || '' }); setEditModalOpen(true) }}
+          className="flex items-center gap-1.5 text-xs text-[#8B91A8] hover:text-[#F0F2F8] border border-[#2A2D3E] hover:border-[#8B91A8] rounded-lg px-3 py-2 transition-colors whitespace-nowrap"
+        >
+          <Pencil className="w-3.5 h-3.5" /> Edit Deal
+        </button>
         <a
           href={`/api/deals/${deal.id}/summary-pdf`}
           target="_blank"
@@ -369,6 +419,66 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
           <p className="text-sm text-[#8B91A8]">{deal.notes}</p>
         </Card>
       )}
+
+      <Modal open={editModalOpen} onClose={() => setEditModalOpen(false)} title="Edit Deal">
+        <div className="space-y-4">
+          <Input
+            label="Campaign Name"
+            value={editForm.campaign_name}
+            onChange={e => setEditForm(f => ({ ...f, campaign_name: e.target.value }))}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Brand Rate ($)"
+              type="number" min="0" step="0.01"
+              value={editForm.brand_rate}
+              onChange={e => setEditForm(f => ({ ...f, brand_rate: e.target.value }))}
+            />
+            <Input
+              label="Creator Rate ($)"
+              type="number" min="0" step="0.01"
+              value={editForm.creator_rate}
+              onChange={e => setEditForm(f => ({ ...f, creator_rate: e.target.value }))}
+            />
+          </div>
+          <Input
+            label="TSP Commission %"
+            type="number" min="0" max="100" step="1"
+            value={editForm.tsp_commission_pct}
+            onChange={e => setEditForm(f => ({ ...f, tsp_commission_pct: e.target.value }))}
+          />
+          <Input
+            label="Payment Reference"
+            value={editForm.payment_reference}
+            onChange={e => setEditForm(f => ({ ...f, payment_reference: e.target.value }))}
+          />
+          <Textarea
+            label="Notes"
+            value={editForm.notes}
+            onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+            rows={3}
+          />
+          {(() => {
+            const br = parseFloat(editForm.brand_rate) || 0
+            const cr = parseFloat(editForm.creator_rate) || 0
+            const pct = parseFloat(editForm.tsp_commission_pct) || 30
+            const margin = br - cr
+            const total = margin + cr * pct / 100
+            const payout = cr * (1 - pct / 100)
+            return (
+              <div className="grid grid-cols-3 gap-3 bg-[#0F1117] rounded-lg p-3 text-xs">
+                <div><p className="text-[#5A6080]">TSP Margin</p><p className="font-mono text-[#F0F2F8] font-semibold">{formatCurrency(margin)}</p></div>
+                <div><p className="text-[#5A6080]">TSP Total</p><p className="font-mono text-[#00E5FF] font-semibold">{formatCurrency(total)}</p></div>
+                <div><p className="text-[#5A6080]">Creator Payout</p><p className="font-mono text-[#00D084] font-semibold">{formatCurrency(payout)}</p></div>
+              </div>
+            )
+          })()}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setEditModalOpen(false)}>Cancel</Button>
+            <Button onClick={saveEdits} disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
