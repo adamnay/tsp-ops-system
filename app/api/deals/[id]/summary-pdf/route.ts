@@ -3,10 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const PDFDocument = require('pdfkit')
-
 async function generateDealPdf(deal: any): Promise<Buffer> {
+  const { default: PDFDocument } = await import('pdfkit')
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: 'LETTER' })
     const chunks: Buffer[] = []
