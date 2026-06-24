@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
     const contractFile = formData.get('contractFile') as File | null
     const contractFileName = formData.get('contractFileName') as string | null
     const parentFolderName = formData.get('parentFolderName') as string | null
+    const parentFolderId = formData.get('parentFolderId') as string | null
     const pdfOnly = formData.get('pdfOnly') === 'true'
 
     if (!dealJson) return NextResponse.json({ error: 'deal data required' }, { status: 400 })
@@ -73,10 +74,14 @@ export async function POST(req: NextRequest) {
 
     const drive = await getDrive(serviceAccountJson)
 
-    // For multi-month campaigns, nest deal folder inside a campaign parent folder
-    const containerFolderId = parentFolderName
-      ? await findOrCreateFolder(drive, rootFolderId, parentFolderName)
-      : rootFolderId
+    // For multi-month campaigns, nest deal folder inside a campaign parent folder.
+    // parentFolderId (Drive ID) takes precedence over parentFolderName to avoid race conditions
+    // where concurrent requests each try to create the same parent folder.
+    const containerFolderId = parentFolderId
+      ? parentFolderId
+      : parentFolderName
+        ? await findOrCreateFolder(drive, rootFolderId, parentFolderName)
+        : rootFolderId
     const dealFolderId = await findOrCreateFolder(drive, containerFolderId, deal.deal_id)
 
     const uploads: string[] = []
@@ -118,7 +123,7 @@ export async function POST(req: NextRequest) {
       pdfError = pdfErr.message
     }
 
-    return NextResponse.json({ dealFolderId, uploads, pdfError, pdfFileId })
+    return NextResponse.json({ dealFolderId, containerFolderId, uploads, pdfError, pdfFileId })
   } catch (e: any) {
     console.error('Drive sync error:', e.message, e.stack)
     return NextResponse.json({ error: e.message }, { status: 500 })

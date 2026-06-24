@@ -302,17 +302,29 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
       setDeals([...newDeals, ...deals])
       toast.success(months > 1 ? `${months} monthly deals created` : `Deal created`)
 
-      // Sync every deal to Drive — contract goes into each month's folder
-      newDeals.forEach((d) => {
+      // Sync deals to Drive — await M1 first to get the parent folder ID,
+      // then pass it directly to M2+ so they don't race to create the same folder.
+      const buildDriveForm = (d: any, pfId?: string) => {
         const driveForm = new FormData()
         driveForm.append('deal', JSON.stringify(d))
         if (contractFile) {
           driveForm.append('contractFile', contractFile)
           driveForm.append('contractFileName', contractFile.name)
         }
-        if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
-        fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: driveForm }).catch(() => {})
-      })
+        if (pfId) driveForm.append('parentFolderId', pfId)
+        else if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
+        return driveForm
+      }
+
+      if (newDeals.length > 0) {
+        const m1Res = await fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: buildDriveForm(newDeals[0]) })
+        const m1Json = await m1Res.json().catch(() => ({}))
+        const resolvedParentId: string | undefined = m1Json.containerFolderId
+
+        newDeals.slice(1).forEach((d) => {
+          fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: buildDriveForm(d, resolvedParentId) }).catch(() => {})
+        })
+      }
       if (months > 1) {
         logActivity({ action: `${months}-month deal created`, entity_type: 'deal', entity_id: newDeals[0].id, entity_label: `${brand.brand_name} × ${creator.stage_name || creator.legal_name}` })
       } else {
