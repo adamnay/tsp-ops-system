@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 import { Readable } from 'stream'
-import { generateDealPdfBytes } from '@/app/api/deals/[id]/summary-pdf/route'
+import { generateDealPdfBytes } from '@/lib/deal-pdf'
 
 export const runtime = 'nodejs'
 
