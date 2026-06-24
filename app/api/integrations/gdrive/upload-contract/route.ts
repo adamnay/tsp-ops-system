@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     const drive = google.drive({ version: 'v3', auth })
 
     const response = await drive.files.create({
+      supportsAllDrives: true,
       requestBody: {
         name: fileName,
         parents: [folderId],
