@@ -218,11 +218,15 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
 
     setLoading(true)
 
+    // Unique suffix per campaign so same brand+creator can have multiple deals
+    const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const baseDealId = generateDealId(brand.brand_name, creator.stage_name || creator.legal_name) + `-${rand}`
+
     const newDeals: any[] = []
     for (let i = 0; i < months; i++) {
       const monthStr = addMonthsToDate(form.campaign_start_month, i)
       const monthName = monthLabel(monthStr)
-      const dealId = generateDealId(brand.brand_name, creator.stage_name || creator.legal_name) + (months > 1 ? `-M${i + 1}` : '')
+      const dealId = baseDealId + (months > 1 ? `-M${i + 1}` : '')
       const paymentRef = generatePaymentReference(dealId)
 
       const autoName = `${brand.brand_name} × ${creator.stage_name || creator.legal_name}`
