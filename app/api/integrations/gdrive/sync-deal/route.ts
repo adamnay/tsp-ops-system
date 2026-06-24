@@ -159,18 +159,24 @@ export async function POST(req: NextRequest) {
 
     // Always generate and upload deal summary PDF
     let pdfError: string | null = null
+    let pdfFileId: string | null = null
     try {
+      console.log('[sync-deal] generating PDF for', deal.deal_id)
       const pdfBuffer = await generateDealPdf(deal)
+      console.log('[sync-deal] PDF buffer size:', pdfBuffer.length)
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       const pdfName = `${deal.deal_id}-summary-${timestamp}.pdf`
-      await uploadToDrive(drive, dealFolderId, pdfName, pdfBuffer, 'application/pdf')
+      console.log('[sync-deal] uploading PDF', pdfName, 'to folder', dealFolderId)
+      const pdfRes = await uploadToDrive(drive, dealFolderId, pdfName, pdfBuffer, 'application/pdf')
+      pdfFileId = pdfRes.data.id
+      console.log('[sync-deal] PDF uploaded, file id:', pdfFileId)
       uploads.push('summary')
     } catch (pdfErr: any) {
-      console.error('PDF generation/upload error:', pdfErr.message, pdfErr.stack)
+      console.error('[sync-deal] PDF generation/upload error:', pdfErr.message, pdfErr.stack)
       pdfError = pdfErr.message
     }
 
-    return NextResponse.json({ dealFolderId, uploads, pdfError })
+    return NextResponse.json({ dealFolderId, uploads, pdfError, pdfFileId })
   } catch (e: any) {
     console.error('Drive sync error:', e.message, e.stack)
     return NextResponse.json({ error: e.message }, { status: 500 })

@@ -87,6 +87,7 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
         body: driveForm,
       }).then(async r => {
         const json = await r.json().catch(() => ({}))
+        console.log('[Drive sync response]', json)
         if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
         else if (json.pdfError) toast.error(`Contract uploaded but PDF failed: ${json.pdfError}`)
         else toast.success('Contract and summary synced to Google Drive')
