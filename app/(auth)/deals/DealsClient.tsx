@@ -158,6 +158,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
     brand_rate: '',
     creator_rate: '',
     tsp_commission_pct: '30',
+    rate_type: 'per_month',
     group: 'pending',
     campaign_start_month: '',
     campaign_months: '1',
@@ -190,7 +191,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
   }
 
   function resetForm() {
-    setForm({ brand_id: '', creator_id: '', brand_rate: '', creator_rate: '', tsp_commission_pct: '30', group: 'pending', campaign_start_month: '', campaign_months: '1', notes: '' })
+    setForm({ brand_id: '', creator_id: '', brand_rate: '', creator_rate: '', tsp_commission_pct: '30', rate_type: 'per_month', group: 'pending', campaign_start_month: '', campaign_months: '1', notes: '' })
     setContractFile(null)
   }
 
@@ -199,10 +200,13 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
   const creatorRate = parseFloat(form.creator_rate) || 0
   const commPct = parseFloat(form.tsp_commission_pct) || 30
   const totalMonths = parseInt(form.campaign_months) || 1
-  const tspMargin = brandRate - creatorRate
-  const tspCommission = creatorRate * commPct / 100
+  const isTotal = form.rate_type === 'total'
+  const perMonthBrandRate = isTotal ? brandRate / totalMonths : brandRate
+  const perMonthCreatorRate = isTotal ? creatorRate / totalMonths : creatorRate
+  const tspMargin = perMonthBrandRate - perMonthCreatorRate
+  const tspCommission = perMonthCreatorRate * commPct / 100
   const tspTotal = tspMargin + tspCommission
-  const creatorPayout = creatorRate * (1 - commPct / 100)
+  const creatorPayout = perMonthCreatorRate * (1 - commPct / 100)
 
   function addMonthsToDate(dateStr: string, months: number): string {
     const [y, m] = dateStr.split('-').map(Number)
@@ -253,8 +257,8 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
         brand_id: form.brand_id,
         creator_id: form.creator_id,
         campaign_name: autoName,
-        brand_rate: parseFloat(form.brand_rate),
-        creator_rate: parseFloat(form.creator_rate),
+        brand_rate: form.rate_type === 'total' ? parseFloat(form.brand_rate) / months : parseFloat(form.brand_rate),
+        creator_rate: form.rate_type === 'total' ? parseFloat(form.creator_rate) / months : parseFloat(form.creator_rate),
         tsp_commission_pct: parseFloat(form.tsp_commission_pct),
         status: months > 1 ? (i === 0 ? 'active' : 'draft') : (GROUP_STATUS_MAP[form.group] ?? 'active'),
         payment_reference: paymentRef,
@@ -600,30 +604,54 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
             <Select label="Brand *" value={form.brand_id} onChange={e => setForm(f => ({ ...f, brand_id: e.target.value }))} options={brandOptions} placeholder="Select brand" />
             <Select label="Creator *" value={form.creator_id} onChange={e => handleCreatorChange(e.target.value)} options={creatorOptions} placeholder="Select creator" />
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[#8B91A8] uppercase tracking-wider">Rate Type</span>
+            <div className="flex rounded-lg overflow-hidden border border-[#2A2D3E]">
+              {[{ value: 'per_month', label: 'Per Month' }, { value: 'total', label: 'Total Campaign' }].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, rate_type: opt.value }))}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${form.rate_type === opt.value ? 'bg-[#00E5FF] text-[#0A0C10]' : 'bg-[#1A1D27] text-[#8B91A8] hover:text-[#F0F2F8]'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {isTotal && totalMonths > 1 && (
+              <span className="text-xs text-[#5A6080]">÷ {totalMonths} months per deal</span>
+            )}
+          </div>
+
           <div className="grid grid-cols-3 gap-4">
-            <Input label="Brand Rate ($) *" type="number" min="0" step="0.01" value={form.brand_rate} onChange={e => setForm(f => ({ ...f, brand_rate: e.target.value }))} placeholder="1000.00" hint="What brand pays TSP" />
-            <Input label="Creator Rate ($) *" type="number" min="0" step="0.01" value={form.creator_rate} onChange={e => setForm(f => ({ ...f, creator_rate: e.target.value }))} placeholder="700.00" hint="What creator is told" />
+            <Input label="Brand Rate ($) *" type="number" min="0" step="0.01" value={form.brand_rate} onChange={e => setForm(f => ({ ...f, brand_rate: e.target.value }))} placeholder="1000.00" hint={isTotal ? 'Total campaign amount' : 'What brand pays TSP'} />
+            <Input label="Creator Rate ($) *" type="number" min="0" step="0.01" value={form.creator_rate} onChange={e => setForm(f => ({ ...f, creator_rate: e.target.value }))} placeholder="700.00" hint={isTotal ? 'Total campaign amount' : 'What creator is told'} />
             <Input label="TSP Commission %" type="number" min="0" max="100" step="1" value={form.tsp_commission_pct} onChange={e => setForm(f => ({ ...f, tsp_commission_pct: e.target.value }))} hint={selectedCreator ? `Default: ${selectedCreator.default_commission_pct}%` : undefined} />
           </div>
 
           {/* Live math preview */}
           {(brandRate > 0 || creatorRate > 0) && (
-            <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-[#5A6080] mb-1">TSP Margin</p>
-                <p className="font-mono text-[#F0F2F8] font-semibold">{formatCurrency(tspMargin)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[#5A6080] mb-1">TSP Commission</p>
-                <p className="font-mono text-[#F0F2F8] font-semibold">{formatCurrency(tspCommission)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[#5A6080] mb-1">TSP Total</p>
-                <p className="font-mono text-[#00E5FF] font-semibold">{formatCurrency(tspTotal)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[#5A6080] mb-1">Creator Gets</p>
-                <p className="font-mono text-[#00D084] font-semibold">{formatCurrency(creatorPayout)}</p>
+            <div className="bg-[#0F1117] border border-[#2A2D3E] rounded-lg p-4 space-y-3">
+              {isTotal && totalMonths > 1 && (
+                <p className="text-xs text-[#FFB800]">Per month: {formatCurrency(perMonthBrandRate)} brand / {formatCurrency(perMonthCreatorRate)} creator</p>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-[#5A6080] mb-1">TSP Margin</p>
+                  <p className="font-mono text-[#F0F2F8] font-semibold">{formatCurrency(tspMargin)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#5A6080] mb-1">TSP Commission</p>
+                  <p className="font-mono text-[#F0F2F8] font-semibold">{formatCurrency(tspCommission)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#5A6080] mb-1">TSP Total{isTotal && totalMonths > 1 ? '/mo' : ''}</p>
+                  <p className="font-mono text-[#00E5FF] font-semibold">{formatCurrency(tspTotal)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#5A6080] mb-1">Creator Gets{isTotal && totalMonths > 1 ? '/mo' : ''}</p>
+                  <p className="font-mono text-[#00D084] font-semibold">{formatCurrency(creatorPayout)}</p>
+                </div>
               </div>
             </div>
           )}
