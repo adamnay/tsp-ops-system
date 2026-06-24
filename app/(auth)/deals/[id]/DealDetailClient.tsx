@@ -349,14 +349,6 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
             <button onClick={downloadSummaryPdf} className="flex items-center gap-1.5 text-xs text-[#00E5FF] hover:underline">
               <Download className="w-3.5 h-3.5" /> Download
             </button>
-            <a
-              href={`/api/deals/${deal.id}/summary-pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-[#8B91A8] hover:text-[#F0F2F8] transition-colors"
-            >
-              <FileText className="w-3.5 h-3.5" /> View Live
-            </a>
           </div>
         ) : (
           <p className="text-sm text-[#5A6080]">No summary generated yet — save an edit or upload a contract to generate one.</p>
