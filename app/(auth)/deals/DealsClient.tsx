@@ -270,16 +270,17 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
           toast.success('Contract uploaded')
           logActivity({ action: 'Contract uploaded', entity_type: 'deal', entity_id: newDeals[0].id, entity_label: primaryDealId })
           const driveForm = new FormData()
-          driveForm.append('file', contractFile)
-          driveForm.append('fileName', contractFile.name)
-          driveForm.append('dealName', primaryDealId)
-          fetch('/api/integrations/gdrive/upload-contract', {
+          driveForm.append('deal', JSON.stringify(newDeals[0]))
+          driveForm.append('contractFile', contractFile)
+          driveForm.append('contractFileName', contractFile.name)
+          fetch('/api/integrations/gdrive/sync-deal', {
             method: 'POST',
             body: driveForm,
           }).then(async r => {
             const json = await r.json().catch(() => ({}))
             if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
-            else toast.success('Backed up to Google Drive')
+            else if (json.pdfError) toast.error(`Contract uploaded but PDF failed: ${json.pdfError}`)
+            else toast.success('Contract and summary backed up to Google Drive')
           }).catch(err => toast.error(`Drive sync error: ${err.message}`))
         }
       }
