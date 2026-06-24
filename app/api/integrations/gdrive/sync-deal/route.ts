@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 import { Readable } from 'stream'
+import { createClient } from '@supabase/supabase-js'
 import { generateDealPdfBytes } from '@/lib/deal-pdf'
 
 export const runtime = 'nodejs'
@@ -84,16 +85,27 @@ export async function POST(req: NextRequest) {
     let pdfError: string | null = null
     let pdfFileId: string | null = null
     try {
-      console.log('[sync-deal] generating PDF for', deal.deal_id)
       const pdfBuffer = Buffer.from(await generateDealPdfBytes(deal))
-      console.log('[sync-deal] PDF buffer size:', pdfBuffer.length)
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       const pdfName = `${deal.deal_id}-summary-${timestamp}.pdf`
-      console.log('[sync-deal] uploading PDF', pdfName, 'to folder', dealFolderId)
+
+      // Upload to Google Drive
       const pdfRes = await uploadToDrive(drive, dealFolderId, pdfName, pdfBuffer, 'application/pdf')
       pdfFileId = pdfRes.data.id
-      console.log('[sync-deal] PDF uploaded, file id:', pdfFileId)
       uploads.push('summary')
+
+      // Also save to Supabase storage and update deal record
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (supabaseUrl && serviceRoleKey) {
+        const supabase = createClient(supabaseUrl, serviceRoleKey)
+        const storagePath = `summaries/${deal.deal_id}/latest.pdf`
+        await supabase.storage.from('contracts').upload(storagePath, pdfBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        })
+        await supabase.from('deals').update({ summary_pdf_path: storagePath }).eq('id', deal.id)
+      }
     } catch (pdfErr: any) {
       console.error('[sync-deal] PDF generation/upload error:', pdfErr.message, pdfErr.stack)
       pdfError = pdfErr.message

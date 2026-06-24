@@ -153,6 +153,13 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
     window.open(data.signedUrl, '_blank')
   }
 
+  async function downloadSummaryPdf() {
+    if (!deal.summary_pdf_path) return
+    const { data, error } = await supabase.storage.from('contracts').createSignedUrl(deal.summary_pdf_path, 60)
+    if (error || !data) { toast.error('Could not generate download link'); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
   async function updateStatus(status: string) {
     setUpdatingStatus(true)
     const { data, error } = await supabase.from('deals').update({ status }).eq('id', deal.id).select('*, brand:brands(*), creator:creators(*)').single()
@@ -196,14 +203,6 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
         >
           <Pencil className="w-3.5 h-3.5" /> Edit Deal
         </button>
-        <a
-          href={`/api/deals/${deal.id}/summary-pdf`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-[#8B91A8] hover:text-[#F0F2F8] border border-[#2A2D3E] hover:border-[#8B91A8] rounded-lg px-3 py-2 transition-colors whitespace-nowrap"
-        >
-          <FileText className="w-3.5 h-3.5" /> Deal Summary
-        </a>
         <div className="w-44">
           <Select value={deal.status} onChange={e => updateStatus(e.target.value)} options={STATUS_OPTIONS} />
         </div>
@@ -337,6 +336,30 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
             <span className="text-xs text-[#5A6080]">PDF, Word, or image</span>
             <input type="file" className="hidden" onChange={handleContractUpload} accept=".pdf,.doc,.docx,.png,.jpg" disabled={uploadingContract} />
           </label>
+        )}
+      </Card>
+
+      {/* Deal Summary PDF */}
+      <Card>
+        <CardHeader><CardTitle>Deal Summary PDF</CardTitle></CardHeader>
+        {deal.summary_pdf_path ? (
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-[#00E5FF] shrink-0" />
+            <span className="text-sm text-[#F0F2F8] flex-1">Latest deal summary</span>
+            <button onClick={downloadSummaryPdf} className="flex items-center gap-1.5 text-xs text-[#00E5FF] hover:underline">
+              <Download className="w-3.5 h-3.5" /> Download
+            </button>
+            <a
+              href={`/api/deals/${deal.id}/summary-pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-[#8B91A8] hover:text-[#F0F2F8] transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" /> View Live
+            </a>
+          </div>
+        ) : (
+          <p className="text-sm text-[#5A6080]">No summary generated yet — save an edit or upload a contract to generate one.</p>
         )}
       </Card>
 
