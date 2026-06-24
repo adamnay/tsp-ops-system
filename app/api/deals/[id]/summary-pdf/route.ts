@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
     }
 
-    const pdfBytes = await generateDealPdfBytes(deal)
+    const pdfBytes = Buffer.from(await generateDealPdfBytes(deal))
 
     return new NextResponse(pdfBytes, {
       headers: {
