@@ -54,11 +54,9 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
   }
 
   function syncDealPdf(updatedDeal: any) {
-    fetch('/api/integrations/gdrive/sync-deal-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deal: updatedDeal }),
-    }).catch(() => {})
+    const form = new FormData()
+    form.append('deal', JSON.stringify(updatedDeal))
+    fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: form }).catch(() => {})
   }
 
   function sanitizeFileName(name: string): string {
@@ -79,19 +77,18 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       setDeal(data)
       toast.success('Contract uploaded')
       logActivity({ action: 'Contract uploaded', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
-      syncDealPdf(data)
       toast('Syncing to Drive…')
       const driveForm = new FormData()
-      driveForm.append('file', file)
-      driveForm.append('fileName', file.name)
-      driveForm.append('dealName', deal.deal_id)
-      fetch('/api/integrations/gdrive/upload-contract', {
+      driveForm.append('deal', JSON.stringify(data))
+      driveForm.append('contractFile', file)
+      driveForm.append('contractFileName', file.name)
+      fetch('/api/integrations/gdrive/sync-deal', {
         method: 'POST',
         body: driveForm,
       }).then(async r => {
         const json = await r.json().catch(() => ({}))
         if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
-        else toast.success('Contract backed up to Google Drive')
+        else toast.success('Contract and summary synced to Google Drive')
       }).catch(err => toast.error(`Drive sync error: ${err.message}`))
     }
     setUploadingContract(false)
