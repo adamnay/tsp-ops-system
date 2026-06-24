@@ -84,13 +84,15 @@ export function DealDetailClient({ deal: initialDeal, payments, disbursements, a
       payment_reference: editForm.payment_reference || null,
       notes: editForm.notes || null,
     }
-    const { data, error } = await supabase.from('deals').update(updates).eq('id', deal.id).select('*, brand:brands(*), creator:creators(*)').single()
+    const { error } = await supabase.from('deals').update(updates).eq('id', deal.id)
     if (error) { toast.error(error.message); setEditSaving(false); return }
-    setDeal(data)
+    // Re-fetch so generated columns (tsp_margin, tsp_total, creator_payout) are fresh
+    const { data: fresh } = await supabase.from('deals').select('*, brand:brands(*), creator:creators(*)').eq('id', deal.id).single()
+    setDeal(fresh)
     setEditModalOpen(false)
     toast.success('Deal updated')
     logActivity({ action: 'Deal edited', entity_type: 'deal', entity_id: deal.id, entity_label: deal.deal_id })
-    syncDealPdf(data)
+    syncDealPdf(fresh)
     setEditSaving(false)
   }
 
