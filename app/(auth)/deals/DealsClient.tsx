@@ -158,11 +158,25 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
     brand_rate: '',
     creator_rate: '',
     tsp_commission_pct: '30',
-    status: 'draft',
+    group: 'pending',
     campaign_start_month: '',
     campaign_months: '1',
     notes: '',
   })
+
+  const GROUP_OPTIONS = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'active', label: 'Active' },
+    { value: 'needs_payment', label: 'Finished — Needs Payment' },
+    { value: 'completed', label: 'Completed & Paid' },
+  ]
+
+  const GROUP_STATUS_MAP: Record<string, string> = {
+    pending: 'draft',
+    active: 'active',
+    needs_payment: 'payment_pending',
+    completed: 'payment_received',
+  }
 
   const selectedCreator = creators.find(c => c.id === form.creator_id)
 
@@ -176,7 +190,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
   }
 
   function resetForm() {
-    setForm({ brand_id: '', creator_id: '', brand_rate: '', creator_rate: '', tsp_commission_pct: '30', status: 'draft', campaign_start_month: '', campaign_months: '1', notes: '' })
+    setForm({ brand_id: '', creator_id: '', brand_rate: '', creator_rate: '', tsp_commission_pct: '30', group: 'pending', campaign_start_month: '', campaign_months: '1', notes: '' })
     setContractFile(null)
   }
 
@@ -242,7 +256,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
         brand_rate: parseFloat(form.brand_rate),
         creator_rate: parseFloat(form.creator_rate),
         tsp_commission_pct: parseFloat(form.tsp_commission_pct),
-        status: 'active',
+        status: GROUP_STATUS_MAP[form.group] ?? 'active',
         payment_reference: paymentRef,
         campaign_months: months,
         campaign_month_number: i + 1,
@@ -649,7 +663,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
             </div>
           )}
 
-          <Select label="Status" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} options={STATUS_OPTIONS} />
+          <Select label="Group" value={form.group} onChange={e => setForm(f => ({ ...f, group: e.target.value }))} options={GROUP_OPTIONS} />
 
           {/* Contract upload */}
           <div className="flex flex-col gap-1">
