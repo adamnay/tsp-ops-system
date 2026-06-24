@@ -302,28 +302,23 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
       setDeals([...newDeals, ...deals])
       toast.success(months > 1 ? `${months} monthly deals created` : `Deal created`)
 
-      // Sync deals to Drive — await M1 first to get the parent folder ID,
-      // then pass it directly to M2+ so they don't race to create the same folder.
-      const buildDriveForm = (d: any, pfId?: string) => {
+      // Sync deals to Drive sequentially — M1 creates the parent folder and returns its ID,
+      // which is reused for M2/M3 so the parent is never created more than once.
+      let resolvedParentId: string | undefined = undefined
+      for (const d of newDeals) {
         const driveForm = new FormData()
         driveForm.append('deal', JSON.stringify(d))
         if (contractFile) {
           driveForm.append('contractFile', contractFile)
           driveForm.append('contractFileName', contractFile.name)
         }
-        if (pfId) driveForm.append('parentFolderId', pfId)
+        if (resolvedParentId) driveForm.append('parentFolderId', resolvedParentId)
         else if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
-        return driveForm
-      }
-
-      if (newDeals.length > 0) {
-        const m1Res = await fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: buildDriveForm(newDeals[0]) })
-        const m1Json = await m1Res.json().catch(() => ({}))
-        const resolvedParentId: string | undefined = m1Json.containerFolderId
-
-        newDeals.slice(1).forEach((d) => {
-          fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: buildDriveForm(d, resolvedParentId) }).catch(() => {})
-        })
+        const res = await fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: driveForm }).catch(() => null)
+        if (res && !resolvedParentId) {
+          const json = await res.json().catch(() => ({}))
+          if (json.containerFolderId) resolvedParentId = json.containerFolderId
+        }
       }
       if (months > 1) {
         logActivity({ action: `${months}-month deal created`, entity_type: 'deal', entity_id: newDeals[0].id, entity_label: `${brand.brand_name} × ${creator.stage_name || creator.legal_name}` })
