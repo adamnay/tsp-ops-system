@@ -276,6 +276,11 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
     }
 
     if (newDeals.length > 0) {
+      // Parent folder name for multi-month campaigns (computed first so contract upload can use it)
+      const parentFolderName = months > 1
+        ? newDeals[0].deal_id.replace(/-M\d+$/, '') + newDeals.map((_, idx) => `-M${idx + 1}`).join('')
+        : null
+
       // Upload contract if provided — link to all deals in this campaign
       if (contractFile) {
         const primaryDealId = newDeals[0].deal_id
@@ -295,6 +300,7 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
           driveForm.append('deal', JSON.stringify(newDeals[0]))
           driveForm.append('contractFile', contractFile)
           driveForm.append('contractFileName', contractFile.name)
+          if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
           fetch('/api/integrations/gdrive/sync-deal', {
             method: 'POST',
             body: driveForm,
@@ -309,14 +315,15 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
 
       setDeals([...newDeals, ...deals])
       toast.success(months > 1 ? `${months} monthly deals created` : `Deal created`)
-      // If no contract was uploaded, still create Drive folder + PDF for each deal
-      if (!contractFile) {
-        newDeals.forEach(d => {
-          const driveForm = new FormData()
-          driveForm.append('deal', JSON.stringify(d))
-          fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: driveForm }).catch(() => {})
-        })
-      }
+
+      // Sync each deal to Drive (skip M1 if contract already handled it)
+      newDeals.forEach((d, idx) => {
+        if (contractFile && idx === 0) return
+        const driveForm = new FormData()
+        driveForm.append('deal', JSON.stringify(d))
+        if (parentFolderName) driveForm.append('parentFolderName', parentFolderName)
+        fetch('/api/integrations/gdrive/sync-deal', { method: 'POST', body: driveForm }).catch(() => {})
+      })
       if (months > 1) {
         logActivity({ action: `${months}-month deal created`, entity_type: 'deal', entity_id: newDeals[0].id, entity_label: `${brand.brand_name} × ${creator.stage_name || creator.legal_name}` })
       } else {

@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
     const dealJson = formData.get('deal') as string | null
     const contractFile = formData.get('contractFile') as File | null
     const contractFileName = formData.get('contractFileName') as string | null
+    const parentFolderName = formData.get('parentFolderName') as string | null
+    const pdfOnly = formData.get('pdfOnly') === 'true'
 
     if (!dealJson) return NextResponse.json({ error: 'deal data required' }, { status: 400 })
 
@@ -70,12 +72,17 @@ export async function POST(req: NextRequest) {
     if (!deal?.deal_id) return NextResponse.json({ error: 'deal_id required' }, { status: 400 })
 
     const drive = await getDrive(serviceAccountJson)
-    const dealFolderId = await findOrCreateFolder(drive, rootFolderId, deal.deal_id)
+
+    // For multi-month campaigns, nest deal folder inside a campaign parent folder
+    const containerFolderId = parentFolderName
+      ? await findOrCreateFolder(drive, rootFolderId, parentFolderName)
+      : rootFolderId
+    const dealFolderId = await findOrCreateFolder(drive, containerFolderId, deal.deal_id)
 
     const uploads: string[] = []
 
-    // Upload contract file if provided
-    if (contractFile && contractFileName) {
+    // Upload contract file if provided (skip when pdfOnly flag is set)
+    if (!pdfOnly && contractFile && contractFileName) {
       const buffer = Buffer.from(await contractFile.arrayBuffer())
       await uploadToDrive(drive, dealFolderId, contractFileName, buffer, getMimeType(contractFileName))
       uploads.push('contract')
