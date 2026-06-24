@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/service'
 
 export const runtime = 'nodejs'
 
@@ -22,15 +21,22 @@ export async function POST(req: NextRequest) {
     const folderId = process.env.GOOGLE_DRIVE_CONTRACTS_FOLDER_ID
 
     if (!serviceAccountJson || !folderId) {
-      return NextResponse.json({ error: 'Google Drive not configured — set GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_DRIVE_CONTRACTS_FOLDER_ID in Vercel' }, { status: 503 })
+      return NextResponse.json({ error: 'Google Drive not configured' }, { status: 503 })
     }
 
-    const { filePath, fileName } = await req.json()
-    if (!filePath || !fileName) {
-      return NextResponse.json({ error: 'filePath and fileName required' }, { status: 400 })
+    const { signedUrl, fileName } = await req.json()
+    if (!signedUrl || !fileName) {
+      return NextResponse.json({ error: 'signedUrl and fileName required' }, { status: 400 })
     }
 
-    // Parse credentials — handle escaped newlines in private_key
+    // Download file via the signed URL generated on the client
+    const fileRes = await fetch(signedUrl)
+    if (!fileRes.ok) {
+      return NextResponse.json({ error: `Failed to fetch file: ${fileRes.status}` }, { status: 500 })
+    }
+    const buffer = Buffer.from(await fileRes.arrayBuffer())
+
+    // Parse service account credentials
     let credentials: any
     try {
       credentials = JSON.parse(serviceAccountJson)
@@ -41,19 +47,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON' }, { status: 500 })
     }
 
-    // Download file from Supabase storage
-    const supabase = createServiceClient()
-    const { data: blob, error: downloadError } = await supabase.storage
-      .from('contracts')
-      .download(filePath)
-
-    if (downloadError || !blob) {
-      return NextResponse.json({ error: `Storage download failed: ${downloadError?.message}` }, { status: 500 })
-    }
-
-    const buffer = Buffer.from(await blob.arrayBuffer())
-
-    // Lazy-load googleapis to avoid edge runtime bundling issues
     const { google } = await import('googleapis')
     const { Readable } = await import('stream')
 
