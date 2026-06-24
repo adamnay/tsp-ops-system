@@ -273,7 +273,11 @@ export function DealsClient({ initialDeals, brands, creators }: Props) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filePath: path, fileName: contractFile.name }),
-          }).catch(() => {})
+          }).then(async r => {
+            const json = await r.json().catch(() => ({}))
+            if (!r.ok) toast.error(`Drive sync failed: ${json.error || r.status}`)
+            else toast.success('Backed up to Google Drive')
+          }).catch(err => toast.error(`Drive sync error: ${err.message}`))
         }
       }
 
